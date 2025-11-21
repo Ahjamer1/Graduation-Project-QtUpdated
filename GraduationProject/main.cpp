@@ -10,7 +10,7 @@
 #include <queue>
 #include <filesystem>
 #include <utility>
-#include "HelperFunctions.h"
+#include "helperFunctions.h"
 using namespace std;
 // parameters
 const int numberOfSU = 20;
@@ -24,15 +24,13 @@ vector <double> PuActiveProb={0.2,0.4,0.5,0.6};
 double probOffToOn = 0.01;//never change this
 unsigned int seed = 123;
 std::mt19937_64 randEngine(seed);
-vector <double>  FalseAlarmAvgTimeSlot(numberOfTimeSlots,0);
-vector <double>  MissDetectionAvgTimeSlot(numberOfTimeSlots,0);
-vector <double> FalseAlarmAvgBand(numberOfBands,0);
-vector <double> MissDetectionAvgBand(numberOfBands,0);
-vector <double> FalseAlarmAvgBandSecond(numberOfBands,0);
-vector <double> MissDetectionAvgBandSecond(numberOfBands,0);
+
+vector <unsigned int> StartingPositions;//To choose random starting positions , change later for 100 bands
 int collisionCounterHistoryPerSUSize = 10;
 int SensedBandsSUPerspectiveHistorySize = 25;
-
+int PuBehaviorHistorySize=10;
+const int offtime=5;
+double DutyCycleDeterministic=0.5;
 
 class Parameters {
 public:
@@ -46,6 +44,9 @@ class Band {
 public:
     bool PUState = 0;
     //this vector shows whether this band was used to transmit pkts or not
+    deque <unsigned int> PuBehaviorHistory;
+    double Weight;
+    Band ():PuBehaviorHistory(PuBehaviorHistorySize,0){}
 };
 
 class Packet{
@@ -116,18 +117,31 @@ public:
     }
 
     //**********************************************************
-    //************* Handling GenerationRate Change *************
+    //************* Handling GenerationRate Change ***********
     //**********************************************************
     int counterPeriod=1; // is the value chosenPeriod from periodsForBulky;
     int chosenPeriod =0; // index of the counter (which is the value chosenPeriod from the periodsForBulky)
     int choosePktPeriod(vector<unsigned int> periods, string actionToTake){    //actionToTake : "increaseQuality" || "decreaseQulaity"
+         vector <unsigned int> PeriodsToChooseFrom;
         if(actionToTake == "increaseQuality"){
             if(this->chosenPeriod >0){
-                this->chosenPeriod--;
+                for(int i=0; i< this->chosenPeriod; i++){
+                    PeriodsToChooseFrom.push_back(i);
+                }
+                if(PeriodsToChooseFrom.size() >0){
+                    this ->chosenPeriod = selectRandomValues(PeriodsToChooseFrom,1)[0];
+                }
+                // this->chosenPeriod--;
             }
         }else if(actionToTake == "decreaseQuality"){
             if(this->chosenPeriod < this->periodsForBulky.size()-1){
-                this->chosenPeriod++;
+                for(int i=this->chosenPeriod + 1; i< this->periodsForBulky.size()-1; i++){
+                    PeriodsToChooseFrom.push_back(i);
+                }
+                if(PeriodsToChooseFrom.size()>0){
+                    this ->chosenPeriod = selectRandomValues(PeriodsToChooseFrom,1)[0];
+                }
+                // this->chosenPeriod++;
             }
         }
         return this-> periodsForBulky[chosenPeriod]; // to be changed later to choose dynamically according to feedback
@@ -137,20 +151,33 @@ public:
 
 
     //**********************************************************
-    //***************** Handling TXRate Change *****************
+    //***************** Handling TXRate Change ***************
     //**********************************************************
     int counterTxRate= 0; // is the value chosenPeriod from periodsForBulky;
     int chosenTxRate = 0; // index of the counter (which is the value chosenPeriod from the periodsForBulky)
 
 
     int chooseTxRate(vector<unsigned int> TxRates, string actionToTake){    //actionToTake : "increaseTxRate" || "decreaseTxRate"
+        vector <unsigned int> RatesToChooseFrom;
         if(actionToTake == "increaseTxRate"){
             if(this->chosenTxRate >0){
-                this->chosenTxRate--;
+                for(int i=0; i< this->chosenTxRate; i++){
+                    RatesToChooseFrom.push_back(i);
+                }
+                if(RatesToChooseFrom.size() >0){
+                    this ->chosenTxRate = selectRandomValues(RatesToChooseFrom,1)[0];
+                }
+                // this->chosenTxRate--;
             }
         }else if(actionToTake == "decreaseTxRate"){
             if(this->chosenTxRate < this->TxRates.size()-1){
-                this->chosenTxRate++;
+                for(int i=this->chosenTxRate + 1; i< this->TxRates.size()-1; i++){
+                    RatesToChooseFrom.push_back(i);
+                }
+                if(RatesToChooseFrom.size()>0){
+                    this ->chosenTxRate = selectRandomValues(RatesToChooseFrom,1)[0];
+                }
+                // this->chosenTxRate++;
             }
         }
         return this-> TxRates[chosenTxRate]; // to be changed later to choose dynamically according to feedback
@@ -162,7 +189,7 @@ public:
     int collisionCounterEvery5TimeSlots =0;
 
     //**********************************************************
-    //******************* SUSensingBands ***********************
+    //******************* SUSensingBands *********************
     //**********************************************************
     vector <unsigned int> bandsAsSeenBySU;
     void fillbandsAsSeenBySU(vector<unsigned int> TXFREQARRAY, int t){
@@ -190,7 +217,9 @@ public:
             }
         }
         this->SensedBandsSUPerspectiveHistory.pop_front();
+
         this->SensedBandsSUPerspectiveHistory.push_back(bandsAsSeenBySU);
+
         // for(int i=0; i< this->SensedBandsSUPerspectiveHistory.size(); i++){
         //     string s =  "SU[" + to_string(i) + "] " + "SensedBandsSUPerspectiveHistory: ";
         //     printVector(SensedBandsSUPerspectiveHistory[i],s);
@@ -212,7 +241,7 @@ public:
 };
 
 //**********************************************************
-//***************** Helper Functions ***********************
+//***************** Helper Functions *********************
 //**********************************************************
 void printQueue(vector<Packet> q) {
     for(int i=0; i< q.size(); i++){
@@ -247,14 +276,55 @@ void PUInitMarkov (vector<Band>& PU)
 }
 //**********************************************************
 //**********************************************************
+vector<unsigned int> AssignStartingPositions(int size, int lower, int upper) {
 
+    uniform_int_distribution<int> dist(lower, upper);
+
+    vector<unsigned int> values(size);
+    for (int i = 0; i < size; ++i)
+        values[i] = dist(randEngine);
+
+    return values;
+}
+
+int PUInitDeterministic (vector<Band>& PU,int time,double DC)
+{
+    int ActiveTime=offtime*((DC/(1-DC)));
+    int counter=0;
+    for (int i=0;i<PU.size();i++)
+    { if  ((((time-StartingPositions[i])%(ActiveTime+offtime)<ActiveTime)&&time>=StartingPositions[i]))//variable for 10
+        {
+            PU[i].PUState=true;
+            counter++;
+        }
+        else
+            PU[i].PUState=false;
+        cout<<PU[i].PUState<<" ";
+        PU[i].PuBehaviorHistory.pop_front();
+        PU[i].PuBehaviorHistory.push_back(PU[i].PUState);
+        double c=0;
+        for (int j=0;j<PuBehaviorHistorySize;j++)
+        {
+            if (PU[i].PuBehaviorHistory[j]==1)
+                c++;
+
+
+        }
+        PU[i].Weight=c/PuBehaviorHistorySize;
+    }
+
+
+
+
+    return counter;
+}
 
 
 
 
 
 //**********************************************************
-//***************** Performance Parameters *****************
+//***************** Performance Parameters ***************
 //**********************************************************
 void CollisionCounter (int time,vector <double> &AvgPerTimeSlot,vector <unsigned int> &TXFreqArray)
 {
@@ -367,7 +437,7 @@ int counter2 = 0;
 int counter3 = 0;
 int counter4 = 0;
 //**********************************************************
-//*************** Allocation Function **********************
+//*************** Allocation Function ********************
 //**********************************************************
 
 vector <unsigned int> allocationFunction(vector <Band> &PU, vector<SecondaryUser>&SU, int t){
@@ -393,6 +463,7 @@ vector <unsigned int> allocationFunction(vector <Band> &PU, vector<SecondaryUser
                     //INTELLIGENCE
                     SU[i].selectedBand =selectRandomValues(possibleBands,1)[0]; // to be changed with history
                     cout<< "SU["<< i<< "]: selectedBand:"<< SU[i].selectedBand<< endl;
+                    // cout<< "SU["<< i<< "]: selectedBand:"<< SU[i].selectedBand<< endl;
                     occupiedBands[SU[i].selectedBand]+=1;
                 }
             }
@@ -479,6 +550,7 @@ vector <unsigned int> allocationFunction(vector <Band> &PU, vector<SecondaryUser
         //     cout<< "SU[3].queueSIZE: "<< SU[i].pktqueue.size()<< endl;
         // }
     }
+
     counter++;
     counter2++;
     counter3++;
@@ -494,6 +566,7 @@ vector <unsigned int> allocationFunction(vector <Band> &PU, vector<SecondaryUser
     cout<< "SU7 PKT QUEUE SIZE: "<< SU[7].pktqueue.size()<< endl;
     printVector(test4, "THIS IS HOW SU 7 SENDS PACKETS");
     printVector(TXFreqArray,"TX frequency array");
+
     return TXFreqArray;
 }
 
@@ -564,7 +637,7 @@ void TakeDecisionStayOrRelinquish(vector <SecondaryUser> &SU, int t){
 void TakeDecisionDataRate(vector <SecondaryUser> &SU, int t){
     for(int i=0; i< SU.size(); i++){
         if(t%10==0 && t!=0){
-            cout<< "SU["<< i<< "]: collisionCounterEvery5TimeSlots: "<< SU[i].collisionCounterEvery5TimeSlots<< endl;
+            // cout<< "SU["<< i<< "]: collisionCounterEvery5TimeSlots: "<< SU[i].collisionCounterEvery5TimeSlots<< endl;
         }
         if(t % 10 ==0 && t!=0){
             if(SU[i].pktGenerationRate ==-1){
@@ -604,14 +677,9 @@ void TakeDecisionDataRate(vector <SecondaryUser> &SU, int t){
                     cout<<"NEW CHOSEN TX RATEEEEEE:::::" <<SU[i].TxRates[SU[i].chosenTxRate]<< endl;
 
                 }
+
             }
         }
-
-
-
-
-
-
         // if(SU[i].pktGenerationRate ==-1){ //TYPE BULKY uninterruptible
 
         //     if(t%10 == 0 && t!=0){
@@ -647,7 +715,6 @@ void TakeDecisionDataRate(vector <SecondaryUser> &SU, int t){
 
     }
 }
-
 void candidateBandsWeights(vector <SecondaryUser> &SU){
     vector <double> weights;
     for(int i=0; i< SU.size(); i++){
@@ -661,7 +728,6 @@ void candidateBandsWeights(vector <SecondaryUser> &SU){
             SU[i].weights[j] = numberOfZeros/ SensedBandsSUPerspectiveHistorySize;
         }
     }
-
 }
 
 int main(){
@@ -670,6 +736,7 @@ int main(){
     Parameters WaitingTime;
     Parameters Utilization;
     Parameters Throughput;
+    StartingPositions=AssignStartingPositions(numberOfBands,1,numberOfBands);
     //initialize system
     initializeSystem();
     // vector<vector<unsigned int>> pktgenerationrate(numberOfTimeSlots, vector<unsigned int>(SU.size(), 0));
@@ -677,24 +744,26 @@ int main(){
         cout<< "time slot: "<< t<< endl;
         // cout<< "TxRate for SU 2 is:"<<SU[2].counterTxRate<<endl;
         // PUInitMarkov(PU);
+        // PUInitDeterministic(PU,t,DutyCycleDeterministic);
+        cout<<endl;
         for (int i=0;i<PU.size();i++){
             PU[i].PUState=0;
         }
 
         //**********************************************************
-        //******************** Generate Packets ********************
+        //******************** Generate Packets ******************
         //**********************************************************
         generatePKTS(SU, t);
 
 
         //**********************************************************
-        //***************** Allocation Function ********************
+        //***************** Allocation Function ******************
         //**********************************************************
         vector <unsigned int> TXFreqArray= allocationFunction(PU, SU,t);
 
 
         //**********************************************************
-        //*************** Calculate CollisionCounter ***************
+        //*************** Calculate CollisionCounter *************
         //**********************************************************
         collisionCounter(SU, t);
 
@@ -704,7 +773,7 @@ int main(){
         TakeDecisionDataRate(SU,t);
 
         //**********************************************************
-        //************ Take Decision Stay or Relinquish ************
+        //************ Take Decision Stay or Relinquish ************ 
         //**********************************************************
         TakeDecisionStayOrRelinquish(SU,t);
 
@@ -772,8 +841,17 @@ int main(){
     // printVector(WaitingTime.AvgPacketWaitingTime,"Average Packet Waiting time for each SU ");
     // printVector(Utilization.AvgPerTimeSlot,"TimeSlot Average");
     // printVector(Utilization.AvgPerBand,"Band Average");
-    printVector(Throughput.AvgPerTimeSlot,"TimeSlot Average");
-    printVector(Throughput.AvgPerBand,"Band Average");
+    // printVector(Throughput.AvgPerTimeSlot,"TimeSlot Average");
+    // printVector(Throughput.AvgPerBand,"Band Average");
+    printDeQueue(PU[0].PuBehaviorHistory);
+
+
+
+    for (int i=0;i<PU.size();i++)
+    {
+        cout<<PU[i].Weight<<" ";
+    }
+
     // *********************************Writing Into Files*******************************************//
 
 
@@ -791,4 +869,4 @@ int main(){
 // we also have to control the pkt transmission rate according to collisions and throughput
 // that is: send a pkt every 2 time slots or every 6 time slots?
 // this way => it allows for extra time slots to be vacant, and thus urgent SU's can try to transmit on these vacant time slots and might be able to transmit their traffic
-// or: another bulky SU, might be able to interleave its pkts with the ongoing transmission of another bulky device => maximum throughput with minimum collisions
+// or: another bulky SU, might be able to interleave its pkts with the ongoing transmission of another bulky device => maximum throughput with minimum collision
