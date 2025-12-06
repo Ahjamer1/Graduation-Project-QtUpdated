@@ -17,7 +17,7 @@ const int numberOfSU = 20;
 const double numberOfBands = 10;
 // vector <double> numofBands ={5,10,25};
 const int numberOfPU = numberOfBands;
-const double numberOfTimeSlots = 60;
+const double numberOfTimeSlots = 200;
 const double durationOfTimeSlot = 0.01;
 const int numberOfBandsPerSU = 1;
 vector <double> PuActiveProb={0.2,0.4,0.5,0.6};
@@ -428,10 +428,10 @@ void initializeSystem() {
     }
 }
 
-vector <unsigned int> test (61,0);
-vector <unsigned int> test2 (61,0);
-vector <unsigned int> test3 (61,0);
-vector <unsigned int> test4 (61,0);
+vector <unsigned int> test (numberOfTimeSlots,0);
+vector <unsigned int> test2 (numberOfTimeSlots,0);
+vector <unsigned int> test3 (numberOfTimeSlots,0);
+vector <unsigned int> test4 (numberOfTimeSlots,0);
 int counter = 0;
 int counter2 = 0;
 int counter3 = 0;
@@ -467,17 +467,17 @@ vector <unsigned int> allocationFunction(vector <Band> &PU, vector<SecondaryUser
                     occupiedBands[SU[i].selectedBand]+=1;
                 }
             }
-            if(SU[i].counterTxRate > 0){
-                cout<<"SU["<<to_string(i)<< "] has: "<< to_string(SU[i].counterTxRate)<< " time slots left"<< endl;
-                SU[i].counterTxRate--;
-                if(SU[i].counterTxRate== 0){
+                if(SU[i].counterTxRate > 0){
+                    cout<<"SU["<<to_string(i)<< "] has: "<< to_string(SU[i].counterTxRate)<< " time slots left"<< endl;
+                    SU[i].counterTxRate--;
+                    if(SU[i].counterTxRate== 0){
+                        TXFreqArray[SU[i].selectedBand]+=1;
+                    }
+                }else if(SU[i].counterTxRate== 0){
+                    cout<<"SU["<<to_string(i)<< "] Reached 0 counter: "<< SU[i].selectedBand<< endl;
+                    //SEND PACKET
                     TXFreqArray[SU[i].selectedBand]+=1;
                 }
-            }else if(SU[i].counterTxRate== 0){
-                cout<<"SU["<<to_string(i)<< "] Reached 0 counter: "<< SU[i].selectedBand<< endl;
-                //SEND PACKET
-                TXFreqArray[SU[i].selectedBand]+=1;
-            }
         }
 
         // if(SU[i].counterTxRate > 0){
