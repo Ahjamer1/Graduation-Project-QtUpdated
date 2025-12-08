@@ -17,7 +17,7 @@ const int numberOfSU = 20;
 const double numberOfBands = 10;
 // vector <double> numofBands ={5,10,25};
 const int numberOfPU = numberOfBands;
-const double numberOfTimeSlots = 200;
+const double numberOfTimeSlots = 50;
 const double durationOfTimeSlot = 0.01;
 const int numberOfBandsPerSU = 1;
 vector <double> PuActiveProb={0.2,0.4,0.5,0.6};
@@ -31,13 +31,15 @@ int SensedBandsSUPerspectiveHistorySize = 25;
 int PuBehaviorHistorySize=10;
 const int offtime=5;
 double DutyCycleDeterministic=0.5;
+int MaxQueueSize = 55;
 
 class Parameters {
 public:
     vector <double> AvgPerTimeSlot;
     vector <double> AvgPacketWaitingTime;
     vector <double> AvgPerBand;
-    Parameters() : AvgPerTimeSlot(numberOfTimeSlots,0),AvgPacketWaitingTime(numberOfSU,0),AvgPerBand(numberOfBands,0){}
+    vector <double> AvgPerSU;
+    Parameters() : AvgPerTimeSlot(numberOfTimeSlots,0),AvgPacketWaitingTime(numberOfSU,0),AvgPerBand(numberOfBands,0),AvgPerSU(numberOfSU,0){}
 };
 
 class Band {
@@ -83,6 +85,9 @@ public:
     // Urgency possible values:
     // 0: low data rate
     // 1: High data rate
+    double NumOfPacketsDropped=0;
+    double NumOfPacketsGenerated=0;
+    double NumOfPacketsSent=0;
 
 
     vector <unsigned int> periodsForBulky = {1,4,9};
@@ -113,7 +118,18 @@ public:
     void generatePkt(unsigned int t){
         Packet pkt;
         pkt.pktGenerationTime = t;
-        this->pktqueue.push(pkt);
+
+        if (this->pktqueue.size()<MaxQueueSize)
+            this->pktqueue.push(pkt);
+        else
+        {
+            this->pktqueue.push(pkt);
+            this->pktqueue.pop();
+            this->NumOfPacketsDropped++;
+
+        }
+
+
     }
 
     //**********************************************************
@@ -122,7 +138,7 @@ public:
     int counterPeriod=1; // is the value chosenPeriod from periodsForBulky;
     int chosenPeriod =0; // index of the counter (which is the value chosenPeriod from the periodsForBulky)
     int choosePktPeriod(vector<unsigned int> periods, string actionToTake){    //actionToTake : "increaseQuality" || "decreaseQulaity"
-         vector <unsigned int> PeriodsToChooseFrom;
+        vector <unsigned int> PeriodsToChooseFrom;
         if(actionToTake == "increaseQuality"){
             if(this->chosenPeriod >0){
                 for(int i=0; i< this->chosenPeriod; i++){
@@ -185,6 +201,7 @@ public:
     //**********************************************************
     //**********************************************************
 
+    vector <double> BandsRankingSeenByEachSu;
 
     int collisionCounterEvery5TimeSlots =0;
 
@@ -234,7 +251,8 @@ public:
         collisionCounterHistoryPerSU(collisionCounterHistoryPerSUSize, 0),
         bandsAsSeenBySU(numberOfBands, 0),
         SensedBandsSUPerspectiveHistory(SensedBandsSUPerspectiveHistorySize, std::vector<unsigned int>(numberOfBands, 0)),
-        weights(numberOfBands, 0)
+        weights(numberOfBands, 0),BandsRankingSeenByEachSu(numberOfBands,0)
+
     {
         // constructor body (optional)
     }
@@ -305,7 +323,7 @@ int PUInitDeterministic (vector<Band>& PU,int time,double DC)
         double c=0;
         for (int j=0;j<PuBehaviorHistorySize;j++)
         {
-            if (PU[i].PuBehaviorHistory[j]==1)
+            if (PU[i].PuBehaviorHistory[j]==0)
                 c++;
 
 
@@ -392,12 +410,24 @@ void UtilizationCalculator (int time,vector <unsigned int> &TXFreqArray,vector <
         {
             AvgPerBand[i]=AvgPerBand[i]+1/numberOfTimeSlots;
             counter++;
-
         }
     }
     AvgPerTimeSlot[time]=counter/numberOfBands;
 }
-
+void NumberOfPacketsDroppedCalculator(vector<SecondaryUser>& SU,vector <double>&AvgPerSU)
+{
+    for (int i=0;i<SU.size();i++)
+    {
+        AvgPerSU[i]=SU[i].NumOfPacketsDropped;
+    }
+}
+void FairnessCalculator(vector<SecondaryUser>& SU,vector <double> &AvgPerSU)
+{
+    for (int i=0;i<SU.size();i++)
+    {
+        AvgPerSU[i]=SU[i].NumOfPacketsSent/SU[i].NumOfPacketsGenerated;
+    }
+}
 //**********************************************************
 //**********************************************************
 
@@ -467,17 +497,17 @@ vector <unsigned int> allocationFunction(vector <Band> &PU, vector<SecondaryUser
                     occupiedBands[SU[i].selectedBand]+=1;
                 }
             }
-                if(SU[i].counterTxRate > 0){
-                    cout<<"SU["<<to_string(i)<< "] has: "<< to_string(SU[i].counterTxRate)<< " time slots left"<< endl;
-                    SU[i].counterTxRate--;
-                    if(SU[i].counterTxRate== 0){
-                        TXFreqArray[SU[i].selectedBand]+=1;
-                    }
-                }else if(SU[i].counterTxRate== 0){
-                    cout<<"SU["<<to_string(i)<< "] Reached 0 counter: "<< SU[i].selectedBand<< endl;
-                    //SEND PACKET
+            if(SU[i].counterTxRate > 0){
+                // cout<<"SU["<<to_string(i)<< "] has: "<< to_string(SU[i].counterTxRate)<< " time slots left"<< endl;
+                SU[i].counterTxRate--;
+                if(SU[i].counterTxRate== 0){
                     TXFreqArray[SU[i].selectedBand]+=1;
                 }
+            }else if(SU[i].counterTxRate== 0){
+                // cout<<"SU["<<to_string(i)<< "] Reached 0 counter: "<< SU[i].selectedBand<< endl;
+                //SEND PACKET
+                TXFreqArray[SU[i].selectedBand]+=1;
+            }
         }
 
         // if(SU[i].counterTxRate > 0){
@@ -525,11 +555,12 @@ vector <unsigned int> allocationFunction(vector <Band> &PU, vector<SecondaryUser
 
                     Packet poppedPacket = SU[i].pktqueue.front();
                     SU[i].pktqueue.pop();
+                    SU[i].NumOfPacketsSent++;
                     poppedPacket.pktArrivalTime = t;
                     poppedPacket.pktWaitingTimeInQueue = poppedPacket.pktArrivalTime - poppedPacket.pktGenerationTime;
                     SU[i].sentPackets.push_back(poppedPacket);
-                    cout<< "PKT SENT ON BAND: "<< SU[i].selectedBand<< ", BY SU: "<< to_string(i)<< endl;
-                    printOnePacket(poppedPacket);
+                    // cout<< "PKT SENT ON BAND: "<< SU[i].selectedBand<< ", BY SU: "<< to_string(i)<< endl;
+                    // printOnePacket(poppedPacket);
                     SU[i].collisionCounterHistoryPerSU.pop_front();
                     SU[i].collisionCounterHistoryPerSU.push_back(0); //No collision
                     // PROBLEM LINE
@@ -555,17 +586,17 @@ vector <unsigned int> allocationFunction(vector <Band> &PU, vector<SecondaryUser
     counter2++;
     counter3++;
     counter4++;
-    cout<< "SU3 PKT QUEUE SIZE: "<< SU[3].pktqueue.size()<< endl;
-    printVector(test, "THIS IS HOW SU 3 SENDS PACKETS");
+    // cout<< "SU3 PKT QUEUE SIZE: "<< SU[3].pktqueue.size()<< endl;
+    // printVector(test, "THIS IS HOW SU 3 SENDS PACKETS");
 
-    cout<< "SU4 PKT QUEUE SIZE: "<< SU[4].pktqueue.size()<< endl;
-    printVector(test2, "THIS IS HOW SU 4 SENDS PACKETS");
-    cout<< "SU14 PKT QUEUE SIZE: "<< SU[14].pktqueue.size()<< endl;
-    printVector(test3, "THIS IS HOW SU 14 SENDS PACKETS");
+    // cout<< "SU4 PKT QUEUE SIZE: "<< SU[4].pktqueue.size()<< endl;
+    // printVector(test2, "THIS IS HOW SU 4 SENDS PACKETS");
+    // cout<< "SU14 PKT QUEUE SIZE: "<< SU[14].pktqueue.size()<< endl;
+    // printVector(test3, "THIS IS HOW SU 14 SENDS PACKETS");
 
-    cout<< "SU7 PKT QUEUE SIZE: "<< SU[7].pktqueue.size()<< endl;
-    printVector(test4, "THIS IS HOW SU 7 SENDS PACKETS");
-    printVector(TXFreqArray,"TX frequency array");
+    // cout<< "SU7 PKT QUEUE SIZE: "<< SU[7].pktqueue.size()<< endl;
+    // printVector(test4, "THIS IS HOW SU 7 SENDS PACKETS");
+    // printVector(TXFreqArray,"TX frequency array");
 
     return TXFreqArray;
 }
@@ -592,11 +623,13 @@ void generatePKTS(vector <SecondaryUser> &SU, int t){
                 SU[i].counterPeriod--;
             }else if(SU[i].counterPeriod== 0){
                 SU[i].generatePkt(t);
+                SU[i].NumOfPacketsGenerated++;
                 SU[i].counterPeriod= SU[i].choosePktPeriod(SU[i].periodsForBulky, "");
             }
         }else{ // Urgent and Best Effort
             if(randomCoinFlipper(SU[i].pktGenerationRate)){
                 SU[i].generatePkt(t);
+                SU[i].NumOfPacketsGenerated++;
             }
         }
     }
@@ -646,18 +679,18 @@ void TakeDecisionDataRate(vector <SecondaryUser> &SU, int t){
                     // choose slower TX number
                     SU[i].chooseTxRate(SU[i].TxRates, "decreaseTxRate");
                     SU[i].choosePktPeriod(SU[i].periodsForBulky, "decreaseQuality");
-                    cout<< "CAMERA SU["<< to_string(i)<< "]: on Band: "<<SU[i].selectedBand<< ": Decreased Quality"<< endl;
-                    cout<< endl;
-                    cout<<"NEW CHOSEN TX RATEEEEEE index:::::" <<SU[i].chosenTxRate<< endl;
-                    cout<<"NEW CHOSEN TX RATEEEEEE:::::" <<SU[i].TxRates[SU[i].chosenTxRate]<< endl;
+                    // cout<< "CAMERA SU["<< to_string(i)<< "]: on Band: "<<SU[i].selectedBand<< ": Decreased Quality"<< endl;
+                    // cout<< endl;
+                    // cout<<"NEW CHOSEN TX RATEEEEEE index:::::" <<SU[i].chosenTxRate<< endl;
+                    // cout<<"NEW CHOSEN TX RATEEEEEE:::::" <<SU[i].TxRates[SU[i].chosenTxRate]<< endl;
 
                 }else{
                     // choose higher TX number
                     SU[i].chooseTxRate(SU[i].TxRates, "increaseTxRate");
                     SU[i].choosePktPeriod(SU[i].periodsForBulky, "increaseQuality");
-                    cout<< "CAMERA SU["<< to_string(i)<< "]: on Band: "<<SU[i].selectedBand<< ": Increased Quality"<< endl;
-                    cout<<"NEW CHOSEN TX RATEEEEEE:::::" <<SU[i].chosenTxRate<< endl;
-                    cout<<"NEW CHOSEN TX RATEEEEEE:::::" <<SU[i].TxRates[SU[i].chosenTxRate]<< endl;
+                    // cout<< "CAMERA SU["<< to_string(i)<< "]: on Band: "<<SU[i].selectedBand<< ": Increased Quality"<< endl;
+                    // cout<<"NEW CHOSEN TX RATEEEEEE:::::" <<SU[i].chosenTxRate<< endl;
+                    // cout<<"NEW CHOSEN TX RATEEEEEE:::::" <<SU[i].TxRates[SU[i].chosenTxRate]<< endl;
 
                 }
             }else if(SU[i].urgency == 2 && SU[i].dataRateClass == 1){
@@ -665,16 +698,16 @@ void TakeDecisionDataRate(vector <SecondaryUser> &SU, int t){
                 if(SU[i].collisionCounterEvery5TimeSlots >= 2){
                     // choose slower TX number
                     SU[i].chooseTxRate(SU[i].TxRates, "decreaseTxRate");
-                    cout<< "BEST EFFORT SU["<< to_string(i)<< "]: on Band: "<<SU[i].selectedBand<< ": Decreased Quality"<< endl;
-                    cout<<"NEW CHOSEN TX RATEEEEEE:::::" <<SU[i].chosenTxRate<< endl;
-                    cout<<"NEW CHOSEN TX RATEEEEEE:::::" <<SU[i].TxRates[SU[i].chosenTxRate]<< endl;
+                    // cout<< "BEST EFFORT SU["<< to_string(i)<< "]: on Band: "<<SU[i].selectedBand<< ": Decreased Quality"<< endl;
+                    // cout<<"NEW CHOSEN TX RATEEEEEE:::::" <<SU[i].chosenTxRate<< endl;
+                    // cout<<"NEW CHOSEN TX RATEEEEEE:::::" <<SU[i].TxRates[SU[i].chosenTxRate]<< endl;
 
                 }else{
                     // choose higher TX number
                     SU[i].chooseTxRate(SU[i].TxRates, "increaseTxRate");
-                    cout<< "BEST EFFORT SU["<< to_string(i)<< "]: on Band: "<<SU[i].selectedBand<< ": Increased Quality"<< endl;
-                    cout<<"NEW CHOSEN TX RATEEEEEE:::::" <<SU[i].chosenTxRate<< endl;
-                    cout<<"NEW CHOSEN TX RATEEEEEE:::::" <<SU[i].TxRates[SU[i].chosenTxRate]<< endl;
+                    // cout<< "BEST EFFORT SU["<< to_string(i)<< "]: on Band: "<<SU[i].selectedBand<< ": Increased Quality"<< endl;
+                    // cout<<"NEW CHOSEN TX RATEEEEEE:::::" <<SU[i].chosenTxRate<< endl;
+                    // cout<<"NEW CHOSEN TX RATEEEEEE:::::" <<SU[i].TxRates[SU[i].chosenTxRate]<< endl;
 
                 }
 
@@ -729,13 +762,29 @@ void candidateBandsWeights(vector <SecondaryUser> &SU){
         }
     }
 }
+void DecisionMaker (vector <SecondaryUser> &SU,vector <Band> &PU)
+{
+    for (int i=0;i<SU.size();i++)
+    {
+        for (int k=0;k<numberOfBands;k++)
+        {
 
+            //perhaps to differeniate between band rankings for  SU's we can increase the weight
+            //differently for each su, for example a weight of 1 will be considered for an urgent SU if he sees
+            // the band empty for 3 consecutive timeslots while a weight of 1 will be considered for a non urgent
+            // SU if he sees the band empty for 10 consecutive time slots
+            SU[i].BandsRankingSeenByEachSu[k]=SU[i].weights[k]+PU[k].Weight;
+        }
+    }
+}
 int main(){
     Parameters Collisions;
     Parameters TotalPackets;
     Parameters WaitingTime;
     Parameters Utilization;
     Parameters Throughput;
+    Parameters NumberofPacketsDropped;
+    Parameters Fairness;
     StartingPositions=AssignStartingPositions(numberOfBands,1,numberOfBands);
     //initialize system
     initializeSystem();
@@ -744,11 +793,11 @@ int main(){
         cout<< "time slot: "<< t<< endl;
         // cout<< "TxRate for SU 2 is:"<<SU[2].counterTxRate<<endl;
         // PUInitMarkov(PU);
-        // PUInitDeterministic(PU,t,DutyCycleDeterministic);
-        cout<<endl;
-        for (int i=0;i<PU.size();i++){
-            PU[i].PUState=0;
-        }
+        PUInitDeterministic(PU,t,DutyCycleDeterministic);
+        // cout<<endl;
+        // for (int i=0;i<PU.size();i++){
+        //     PU[i].PUState=0;
+        // }
 
         //**********************************************************
         //******************** Generate Packets ******************
@@ -773,17 +822,25 @@ int main(){
         TakeDecisionDataRate(SU,t);
 
         //**********************************************************
-        //************ Take Decision Stay or Relinquish ************ 
+        //************ Take Decision Stay or Relinquish ************
         //**********************************************************
         TakeDecisionStayOrRelinquish(SU,t);
 
         if (t%10 ==0){
             for(int i=0; i< SU.size(); i++){
                 SU[i].collisionCounterEvery5TimeSlots=0;
+                cout<<SU[i].pktqueue.size()<<" ";
             }
         }
 
         candidateBandsWeights(SU);
+        DecisionMaker(SU,PU);
+        for (int i=0;i<SU.size();i++)
+        {
+            printVector(SU[i].BandsRankingSeenByEachSu,"Bands Rank seen by SU number "+to_string(i));
+            printVector(SU[i].weights,"weights of bands seen by SU "+to_string(i));
+
+        }
         // cout<<"selected band for su2: "<<SU[2].selectedBand<<endl;
         // printVector(SU[2].collisionCounterHistoryPerSU, "SU2 ControlHistory: ");
         // printDeQueue(SU[2].collisionCounterHistoryPerSU);
@@ -809,7 +866,7 @@ int main(){
         // for(int i=0; i< SU[0].SensedBandsSUPerspectiveHistory.size(); i++){
         //     printVector(SU[0].SensedBandsSUPerspectiveHistory[i], "history: ");
         // }
-        printVector(SU[0].weights,"weightsVector: ");
+        // printVector(SU[0].weights,"weightsVector: ");
     }
     // cout<<"All packets: "<< endl;
     // for(int i=0; i< SU.size(); i++){
@@ -832,6 +889,8 @@ int main(){
     // printQueue(SU[2].sentPackets);
 
     WaitingTimeCalculator(SU,WaitingTime.AvgPacketWaitingTime);
+    NumberOfPacketsDroppedCalculator(SU,NumberofPacketsDropped.AvgPerSU);
+    FairnessCalculator(SU,Fairness.AvgPerSU);
 
 
 
@@ -843,7 +902,20 @@ int main(){
     // printVector(Utilization.AvgPerBand,"Band Average");
     // printVector(Throughput.AvgPerTimeSlot,"TimeSlot Average");
     // printVector(Throughput.AvgPerBand,"Band Average");
-    printDeQueue(PU[0].PuBehaviorHistory);
+    // printDeQueue(PU[0].PuBehaviorHistory);
+
+    for (int i=0;i<SU.size();i++)
+    {
+        cout<<"SU"<<i<<" PacketsGenerated:"<<SU[i].NumOfPacketsGenerated<<" ";
+        cout<<" PacketsSent:"<<SU[i].NumOfPacketsSent;
+        cout<<" PacketsDropped:"<<SU[i].NumOfPacketsDropped;
+        cout<<" Que Size: "<<SU[i].pktqueue.size();
+        cout<<endl;
+    }
+    printVector(Fairness.AvgPerSU,"Packets sent over generated for each su");
+    printVector(NumberofPacketsDropped.AvgPerSU,"Packets Dropped for each su");
+
+
 
 
 
