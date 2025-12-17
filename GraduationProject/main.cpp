@@ -652,6 +652,29 @@ void collisionCounter(vector <SecondaryUser> &SU, int t){
 }
 
 
+bool checkBandsWithNoPU(vector <unsigned int> PUStates){ // RETURNS TRUE IF THEre IS AT LEAST ONE EMPTY BAND NOT OCCUPIED BY PU
+    for (int i=0; i< PUStates.size(); i++){
+        if(PUStates[i] == 0){
+            return true;
+        }
+    }
+    return false;
+}
+
+vector<pair<int, int>> getHigherValues(vector<int> nums, int target_index) {
+    vector<pair<int, int>> result;
+    int target_value = nums[target_index];
+
+    for (int i = 0; i < nums.size(); i++) {
+        if (nums[i] > target_value) {
+            // Store the value and the index as a pair
+            result.push_back({nums[i], i});
+        }
+    }
+    return result;
+}
+
+
 //INTELLIGENCE
 void TakeDecisionStayOrRelinquish(vector <SecondaryUser> &SU, int t){
     // FOR EACH SU => Decide to stay or relinquish
@@ -694,13 +717,61 @@ void TakeDecisionStayOrRelinquish(vector <SecondaryUser> &SU, int t){
             PUActiveRightNow[i] = 0;
         }
     }
+
+
+
+    bool bandWithNoPUExists = checkBandsWithNoPU(PUActiveRightNow);
+
+
+
+
+
     for(int i=0; i< SU.size(); i++){
 
         if(PUActiveRightNow[SU[i].selectedBand] == 1){
             SU[i].selectedBand = -1;
             // CALL ACQUIRE BAND FUNCTION
         }else{
+            if(t %3 ==0){
+                if(SU[i].urgency == 0){ //URGENT SU
+                    // CHECK PERFORMANCE PARAMETERS FOR URGENT SU
+                    // DECIDE TO STAY OR RELINQUISH
+                    if(PERFORMANCE < 60%){
+                        RELINQUISH;
+                    }else {
+                        continue;
+                    }
+                }
 
+            }else if (t%20 == 0){
+                if(SU[i].dataRateClass == 1){ // CAMERA OR BEST EFFORT
+                    // CHECK PERFORMANCE
+                    if(performanceMeasure > 0.6){
+                        continue;
+                    }else if(performanceMeasure < 0.6){
+                        if(!bandWithNoPUExists && NoScoreLargerThanOurScore){
+                            // STAY
+                            // DECREASE DATA RATE
+                            // (COUNTER OF TIMES DECREASED TXRATE)++
+                            // ASSIGN A RANDOM SHIFT NUMBER BETWEEN 0 AND TXPERIOD CHOSEN
+                        }else if(thereIsEmptyBands){
+                            // LOOP OVER EMPTY BANDS
+                            // EXTRACT THE BANDS THAT HAS CURRENTLY HIGHER SCORES THAN OURS,
+                            // AND NO PREVIOUS EXPERIENCE SCORE (hasn't been acquired by this SU before) OR HIGH PREVIOUS EXPERIENCE SCORE (higher history)
+                            if(COUNTER OF TIMES DECREASED TXRATE < 4){
+                                continue;
+                            }else{
+                                RELINQUISH
+                            }
+
+
+
+                        }
+                    }
+                }else{
+                    continue;
+                }
+            }
         }
 
 
