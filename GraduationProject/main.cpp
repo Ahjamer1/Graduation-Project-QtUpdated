@@ -25,13 +25,13 @@ double probOffToOn = 0.01;//never change this
 unsigned int seed = 123;
 std::mt19937_64 randEngine(seed);
 
-vector <unsigned int> StartingPositions;//To choose random starting positions , change later for 100 bands
+vector <unsigned int> StartingPositions;        //To choose random starting positions , change later for 100 bands
 int collisionCounterHistoryPerSUSize = 10;
 int SensedBandsSUPerspectiveHistorySize = 25;
 int PuBehaviorHistorySize=10;
 const int offtime=5;
 double DutyCycleDeterministic=0.5;
-int MaxQueueSize = 55;
+int MaxQueueSize = 10;
 
 class Parameters {
 public:
@@ -118,18 +118,20 @@ public:
     void generatePkt(unsigned int t){
         Packet pkt;
         pkt.pktGenerationTime = t;
+        // ADDED FIXED SIZE QUEUE FOR PACKET DROPPING AFTER CERTAIN TIME WITHOUT TX.
+        if( this->urgency ==1 && this->dataRateClass == 1 || this->urgency ==2 && this->dataRateClass == 1){
+            if (this->pktqueue.size()< MaxQueueSize)
+                this->pktqueue.push(pkt);
+            else
+            {
+                this->pktqueue.push(pkt);
+                this->pktqueue.pop();
+                this->NumOfPacketsDropped++;
 
-        if (this->pktqueue.size()<MaxQueueSize)
-            this->pktqueue.push(pkt);
-        else
-        {
-            this->pktqueue.push(pkt);
-            this->pktqueue.pop();
-            this->NumOfPacketsDropped++;
-
+            }
+        }else{
+              this->pktqueue.push(pkt);
         }
-
-
     }
 
     //**********************************************************
@@ -652,7 +654,58 @@ void collisionCounter(vector <SecondaryUser> &SU, int t){
 
 //INTELLIGENCE
 void TakeDecisionStayOrRelinquish(vector <SecondaryUser> &SU, int t){
+    // FOR EACH SU => Decide to stay or relinquish
+    // if: PU is ON on selectedBand => relinquish and acquire another band immediately ✅
+    // if urgent:
+    // if performance parameters not good over 3 time slots => relinquish => call ACQUIREBAND
+    // else if camera or best effort:
+    // if: performance is good
+    // STAY
+    // Increase DataRate
+
+
+    // else if: performance is bad
+    // when measuring the performance of a band: this performance is stored within a vector for each SU
+    // each SU: [band 0, band 1, band 2, ... , band 9,] with scores.
+    // When Acquiring => you try to acquire a band, that was good for you before (high score) or a new band you haven't tried before
+    // these scores show the following:
+    // 1. The number of time slots the band was acquired for
+    // 2. The total score
+    // 3. the score has a TTL that decreases with time => so that we give bands another opportunity after adequate time
+
+
+    //if: otherBands are not better than current or no other possible bands (occupied by PU)
+    // STAY
+    // decrease data rate and choose a random shift between 0 and TXperiod time, to transmit at.
+    //else (other are bands are better && there are possible bands available to move to):
+    // if we decreased TXrate multiple times and current one is low:
+    //relinquish => and acquire one of the top candidateBands randomly
+    // when calling acquire band =>
+    // else: stay for other 10 time slots
+
+
+
+
+    vector <unsigned int> PUActiveRightNow(PU.size(),0);
+    for (int i=0; i< PU.size(); i++){
+        if(PU[i].PUState == true){
+            PUActiveRightNow[i] = 1;
+        }else{
+            PUActiveRightNow[i] = 0;
+        }
+    }
     for(int i=0; i< SU.size(); i++){
+
+        if(PUActiveRightNow[SU[i].selectedBand] == 1){
+            SU[i].selectedBand = -1;
+            // CALL ACQUIRE BAND FUNCTION
+        }else{
+
+        }
+
+
+
+
         if(t %10 ==0 && t !=0){
             if(SU[i].pktGenerationRate !=-1){
                 if(SU[i].collisionCounterEvery5TimeSlots >=7){
@@ -755,6 +808,7 @@ void candidateBandsWeights(vector <SecondaryUser> &SU){
             double numberOfZeros = 0;
             for(int k = 0; k< SU[i].SensedBandsSUPerspectiveHistory.size(); k++){
                 if(SU[i].SensedBandsSUPerspectiveHistory[k][j] ==0){
+
                     numberOfZeros++;
                 }
             }
@@ -768,11 +822,12 @@ void DecisionMaker (vector <SecondaryUser> &SU,vector <Band> &PU)
     {
         for (int k=0;k<numberOfBands;k++)
         {
-
             //perhaps to differeniate between band rankings for  SU's we can increase the weight
             //differently for each su, for example a weight of 1 will be considered for an urgent SU if he sees
             // the band empty for 3 consecutive timeslots while a weight of 1 will be considered for a non urgent
             // SU if he sees the band empty for 10 consecutive time slots
+            // make linear combination from all parameters that are calculated
+            //
             SU[i].BandsRankingSeenByEachSu[k]=SU[i].weights[k]+PU[k].Weight;
         }
     }
@@ -825,6 +880,7 @@ int main(){
         //************ Take Decision Stay or Relinquish ************
         //**********************************************************
         TakeDecisionStayOrRelinquish(SU,t);
+
 
         if (t%10 ==0){
             for(int i=0; i< SU.size(); i++){
