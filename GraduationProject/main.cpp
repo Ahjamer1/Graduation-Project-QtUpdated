@@ -17,7 +17,7 @@ const int numberOfSU = 20;
 const double numberOfBands = 20;
 // vector <double> numofBands ={5,10,25};
 const int numberOfPU = numberOfBands;
-const double numberOfTimeSlots = 50;
+const double numberOfTimeSlots = 500;
 const double durationOfTimeSlot = 0.01;
 const int numberOfBandsPerSU = 1;
 vector <double> PuActiveProb={0.2,0.4,0.5,0.6};
@@ -67,7 +67,8 @@ public:
 
     // This is a deque of the vector called "bandsAsSeenBySU", which shows how SU sees all bands including his band.
     deque<vector<unsigned int>> SensedBandsSUPerspectiveHistory;
-
+    //MURAD
+    // deque <vector<unsigned int>> ExperiencedBands;
 
     // This deque shows the values of collision as 1 / no collision as zero experineced by each SU every 10 time slots
     // to calculate collisions according to this vector later
@@ -79,9 +80,9 @@ public:
 
     int urgency; // one of possible three values: delay-intolerant / delay tolerant uninterruptable (will lower datarate) / delay tolerant interruptable
     // Urgency possible values:
-    // 0: Delay intolerant
-    // 1: Delay tolerant uninterruptable
-    // 2: Delay tolerant interruptable
+    // 0: Delay intolerant "URGENT"
+    // 1: Delay tolerant uninterruptable "CAMERA"
+    // 2: Delay tolerant interruptable "BEST EFFORT"
     int dataRateClass; // one of possible two values: realtime traffic (high data rate) / low dataRate
     // Urgency possible values:
     // 0: low data rate
@@ -89,11 +90,12 @@ public:
     double NumOfPacketsDropped=0;
     double NumOfPacketsGenerated=0;
     double NumOfPacketsSent=0;
+    int numberOfTimesDecreasedTXRATE = 0;
+    int shift = 0;
 
-
-    vector <unsigned int> periodsForBulky = {1,4,9};
+    vector <unsigned int> periodsForBulky = {0,1,4,9,14};
     // periodsForBulky generates a packet every 2, 5, 10 (1,4,9 are set for counting purposes)
-    vector <unsigned int> TxRates = {0,2,5,10,20}; // the value "0" means "1" which means: every time slot(fastest) / the value "0" means "2" which means: ON OFF ON OFF
+    vector <unsigned int> TxRates = {0,2,5,10,15}; // the value "0" means "1" which means: every time slot(fastest) / the value "0" means "2" which means: ON OFF ON OFF
     // TxRates transmits a packet every 1, 2, 5, 10, 20 (0,1,4,9,19 are set for counting purposes)
 
 
@@ -488,6 +490,7 @@ int counter4 = 0;
 //*************** Allocation Function ******************
 //**********************************************************
 
+// INTELLIGENCE (IT SHOULD BE DOING ACQUIRING A NEW BAND)
 vector <unsigned int> allocationFunction(vector <Band> &PU, vector<SecondaryUser>&SU, int t){
     vector <unsigned int> possibleBands;
     vector <unsigned int> occupiedBands(PU.size(), 0);
@@ -677,14 +680,14 @@ bool checkBandsWithNoPU(vector <unsigned int> PUStates){ // RETURNS TRUE IF THEr
     return false;
 }
 
-vector<pair<int, int>> getHigherValues(vector<int> nums, int target_index) {
-    vector<pair<int, int>> result;
+vector<unsigned int> getHigherValues(vector<double> nums, int target_index) {
+    vector<unsigned int> result;
     int target_value = nums[target_index];
 
     for (int i = 0; i < nums.size(); i++) {
         if (nums[i] > target_value) {
             // Store the value and the index as a pair
-            result.push_back({nums[i], i});
+            result.push_back(i);
         }
     }
     return result;
@@ -718,11 +721,11 @@ void TakeDecisionStayOrRelinquish(vector <SecondaryUser> &SU, int t){
     // FOR EACH SU => Decide to stay or relinquish
     // if: PU is ON on selectedBand => relinquish and acquire another band immediately ✅
     // if urgent:
-    // if performance parameters not good over 3 time slots => relinquish => call ACQUIREBAND
+    // if performance parameters not good over 3 time slots => relinquish => call ACQUIREBAND✅
     // else if camera or best effort:
     // if: performance is good
-    // STAY
-    // Increase DataRate
+    // STAY✅
+    // Increase DataRate✅
 
 
     // else if: performance is bad
@@ -745,8 +748,6 @@ void TakeDecisionStayOrRelinquish(vector <SecondaryUser> &SU, int t){
     // else: stay for other 10 time slots
 
 
-
-
     vector <unsigned int> PUActiveRightNow(PU.size(),0);
     for (int i=0; i< PU.size(); i++){
         if(PU[i].PUState == true){
@@ -755,70 +756,101 @@ void TakeDecisionStayOrRelinquish(vector <SecondaryUser> &SU, int t){
             PUActiveRightNow[i] = 0;
         }
     }
-
-
-
     bool bandWithNoPUExists = checkBandsWithNoPU(PUActiveRightNow);
 
-
-
-
-
     for(int i=0; i< SU.size(); i++){
+        vector<unsigned int> BandsWithHigherScore = getHigherValues(SU[i].BandsRankingSeenByEachSu,SU[i].selectedBand);
+
 
         if(PUActiveRightNow[SU[i].selectedBand] == 1){
             SU[i].selectedBand = -1;
-            // CALL ACQUIRE BAND FUNCTION
+            SU[i].numberOfTimesDecreasedTXRATE = 0;
+            // CALL ACQUIRE BAND FUNCTION FIXXXXXX!!!!
+            // if(BandsWithHigherScore.size() > 0) {
+            //     SU[i].selectedBand = selectRandomValues(BandsWithHigherScore, 1)[0];
+            // }
+            break;
+
         }else{
             if(t %3 ==0){
                 if(SU[i].urgency == 0){ //URGENT SU
                     // CHECK PERFORMANCE PARAMETERS FOR URGENT SU
                     // DECIDE TO STAY OR RELINQUISH
-                    if(PERFORMANCE < 60%){
-                        RELINQUISH;
+                    if(SU[i].RelinquishingTendency > 0.6){
+                        // RELINQUISH
+                        SU[i].selectedBand = -1;
+                        // CALL ACQUIRE BAND FUNCTION
+                        // if(BandsWithHigherScore.size() > 0) {
+                        //     SU[i].selectedBand = selectRandomValues(BandsWithHigherScore, 1)[0];
+                        // }
                     }else {
                         continue;
                     }
                 }
 
-            }else if (t%20 == 0){
+            }
+            if(t%20 == 0){
                 if(SU[i].dataRateClass == 1){ // CAMERA OR BEST EFFORT
                     // CHECK PERFORMANCE
-                    if(performanceMeasure > 0.6){
-                        continue;
-                    }else if(performanceMeasure < 0.6){
-                        if(!bandWithNoPUExists && NoScoreLargerThanOurScore){
+                    if(SU[i].RelinquishingTendency < 0.6){
+                    // ****************************************************
+                    // SU IS DOING WELL IN BAND, SO INCREASE TXRATE
+                    // ****************************************************
+                        if(SU[i].urgency == 1){ // CAMERA
+                            SU[i].chooseTxRate(SU[i].TxRates, "increaseTxRate");
+                            SU[i].choosePktPeriod(SU[i].periodsForBulky, "increaseQuality");
+                        }else if(SU[i].urgency == 2){ // BEST EFFORT
+                             SU[i].chooseTxRate(SU[i].TxRates, "increaseTxRate");
+                        }
+                    // ****************************************************
+                    // ****************************************************
+                    }else if(SU[i].RelinquishingTendency >= 0.6){
+
+                        if(!bandWithNoPUExists || BandsWithHigherScore.size() ==0){ // NO bands not occupied by a PU (all others have PU in them) OR NO bands with higher score than current band
                             // STAY
                             // DECREASE DATA RATE
-                            // (COUNTER OF TIMES DECREASED TXRATE)++
-                            // ASSIGN A RANDOM SHIFT NUMBER BETWEEN 0 AND TXPERIOD CHOSEN
-                        }else if(thereIsEmptyBands){
-                            // LOOP OVER EMPTY BANDS
-                            // EXTRACT THE BANDS THAT HAS CURRENTLY HIGHER SCORES THAN OURS,
-                            // AND NO PREVIOUS EXPERIENCE SCORE (hasn't been acquired by this SU before) OR HIGH PREVIOUS EXPERIENCE SCORE (higher history)
-                            if(COUNTER OF TIMES DECREASED TXRATE < 4){
-                                continue;
-                            }else{
-                                RELINQUISH
+                            if(SU[i].urgency == 1){ // CAMERA
+                                SU[i].chooseTxRate(SU[i].TxRates, "decreaseTxRate");
+                                SU[i].choosePktPeriod(SU[i].periodsForBulky, "decreaseQuality");
+                            }else if(SU[i].urgency == 2){ // BEST EFFORT
+                                SU[i].chooseTxRate(SU[i].TxRates, "decreaseTxRate");
                             }
 
+                            // (COUNTER OF TIMES DECREASED TXRATE)++
+                            SU[i].numberOfTimesDecreasedTXRATE++;
+                            // ASSIGN A RANDOM SHIFT NUMBER BETWEEN 0 AND TXPERIOD CHOSEN
+                            SU[i].shift = selectRandomValue(SU[i].chosenTxRate);
+                        }else if(bandWithNoPUExists && BandsWithHigherScore.size() >=1){
+                            // ****************************************************
+                            // LOOP OVER EMPTY BANDS
+                            // EXTRACT THE BANDS THAT HAS CURRENTLY HIGHER SCORES THAN OURS,
+                            // BOTH STEPS ARE DONE IN BandsWithHigherScore
+                            // ****************************************************
+                            // AND NO PREVIOUS EXPERIENCE SCORE (hasn't been acquired by this SU before) OR HIGH PREVIOUS EXPERIENCE SCORE (higher history)
+                            if(SU[i].numberOfTimesDecreasedTXRATE < 4){
+                                if(SU[i].urgency == 1){ // CAMERA
+                                    SU[i].chooseTxRate(SU[i].TxRates, "decreaseTxRate");
+                                    SU[i].choosePktPeriod(SU[i].periodsForBulky, "decreaseQuality");
+                                }else if(SU[i].urgency == 2){ // BEST EFFORT
+                                    SU[i].chooseTxRate(SU[i].TxRates, "decreaseTxRate");
+                                }
 
+                                // (COUNTER OF TIMES DECREASED TXRATE)++
+                                SU[i].numberOfTimesDecreasedTXRATE++;
+                                // ASSIGN A RANDOM SHIFT NUMBER BETWEEN 0 AND TXPERIOD CHOSEN
+                                SU[i].shift = selectRandomValue(SU[i].chosenTxRate);
 
+                            }else{
+                                // RELINQUISH
+                                SU[i].selectedBand = -1;
+                                SU[i].numberOfTimesDecreasedTXRATE = 0;
+                                // CALL ACQUIRE BAND FUNCTION
+                                if(BandsWithHigherScore.size() > 0) {
+                                    SU[i].selectedBand = selectRandomValues(BandsWithHigherScore, 1)[0];
+                                }
+                            }
                         }
                     }
-                }else{
-                    continue;
-                }
-            }
-        }
-
-
-
-
-        if(t %10 ==0 && t !=0){
-            if(SU[i].pktGenerationRate !=-1){
-                if(SU[i].collisionCounterEvery5TimeSlots >=7){
-                    SU[i].selectedBand = -1;
                 }else{
                     continue;
                 }
@@ -829,87 +861,87 @@ void TakeDecisionStayOrRelinquish(vector <SecondaryUser> &SU, int t){
 
 
 //INTELLIGENCE
-void TakeDecisionDataRate(vector <SecondaryUser> &SU, int t){
-    for(int i=0; i< SU.size(); i++){
-        if(t%10==0 && t!=0){
-            // cout<< "SU["<< i<< "]: collisionCounterEvery5TimeSlots: "<< SU[i].collisionCounterEvery5TimeSlots<< endl;
-        }
-        if(t % 10 ==0 && t!=0){
-            if(SU[i].pktGenerationRate ==-1){
-                // cout<< "SU["<< i<< "]: collisionCounterEvery5TimeSlots: "<< SU[i].collisionCounterEvery5TimeSlots<< endl;
-                if(SU[i].collisionCounterEvery5TimeSlots >= 2){
-                    // choose slower TX number
-                    SU[i].chooseTxRate(SU[i].TxRates, "decreaseTxRate");
-                    SU[i].choosePktPeriod(SU[i].periodsForBulky, "decreaseQuality");
-                    // cout<< "CAMERA SU["<< to_string(i)<< "]: on Band: "<<SU[i].selectedBand<< ": Decreased Quality"<< endl;
-                    // cout<< endl;
-                    // cout<<"NEW CHOSEN TX RATEEEEEE index:::::" <<SU[i].chosenTxRate<< endl;
-                    // cout<<"NEW CHOSEN TX RATEEEEEE:::::" <<SU[i].TxRates[SU[i].chosenTxRate]<< endl;
+// void TakeDecisionDataRate(vector <SecondaryUser> &SU, int t){
+//     for(int i=0; i< SU.size(); i++){
+//         if(t%10==0 && t!=0){
+//             // cout<< "SU["<< i<< "]: collisionCounterEvery5TimeSlots: "<< SU[i].collisionCounterEvery5TimeSlots<< endl;
+//         }
+//         if(t % 10 ==0 && t!=0){
+//             if(SU[i].pktGenerationRate ==-1){
+//                 // cout<< "SU["<< i<< "]: collisionCounterEvery5TimeSlots: "<< SU[i].collisionCounterEvery5TimeSlots<< endl;
+//                 if(SU[i].collisionCounterEvery5TimeSlots >= 2){
+//                     // choose slower TX number
+//                     SU[i].chooseTxRate(SU[i].TxRates, "decreaseTxRate");
+//                     SU[i].choosePktPeriod(SU[i].periodsForBulky, "decreaseQuality");
+//                     // cout<< "CAMERA SU["<< to_string(i)<< "]: on Band: "<<SU[i].selectedBand<< ": Decreased Quality"<< endl;
+//                     // cout<< endl;
+//                     // cout<<"NEW CHOSEN TX RATEEEEEE index:::::" <<SU[i].chosenTxRate<< endl;
+//                     // cout<<"NEW CHOSEN TX RATEEEEEE:::::" <<SU[i].TxRates[SU[i].chosenTxRate]<< endl;
 
-                }else{
-                    // choose higher TX number
-                    SU[i].chooseTxRate(SU[i].TxRates, "increaseTxRate");
-                    SU[i].choosePktPeriod(SU[i].periodsForBulky, "increaseQuality");
-                    // cout<< "CAMERA SU["<< to_string(i)<< "]: on Band: "<<SU[i].selectedBand<< ": Increased Quality"<< endl;
-                    // cout<<"NEW CHOSEN TX RATEEEEEE:::::" <<SU[i].chosenTxRate<< endl;
-                    // cout<<"NEW CHOSEN TX RATEEEEEE:::::" <<SU[i].TxRates[SU[i].chosenTxRate]<< endl;
+//                 }else{
+//                     // choose higher TX number
+//                     SU[i].chooseTxRate(SU[i].TxRates, "increaseTxRate");
+//                     SU[i].choosePktPeriod(SU[i].periodsForBulky, "increaseQuality");
+//                     // cout<< "CAMERA SU["<< to_string(i)<< "]: on Band: "<<SU[i].selectedBand<< ": Increased Quality"<< endl;
+//                     // cout<<"NEW CHOSEN TX RATEEEEEE:::::" <<SU[i].chosenTxRate<< endl;
+//                     // cout<<"NEW CHOSEN TX RATEEEEEE:::::" <<SU[i].TxRates[SU[i].chosenTxRate]<< endl;
 
-                }
-            }else if(SU[i].urgency == 2 && SU[i].dataRateClass == 1){
-                // cout<< "SU["<< i<< "]: collisionCounterEvery5TimeSlots: "<< SU[i].collisionCounterEvery5TimeSlots<< endl;
-                if(SU[i].collisionCounterEvery5TimeSlots >= 2){
-                    // choose slower TX number
-                    SU[i].chooseTxRate(SU[i].TxRates, "decreaseTxRate");
-                    // cout<< "BEST EFFORT SU["<< to_string(i)<< "]: on Band: "<<SU[i].selectedBand<< ": Decreased Quality"<< endl;
-                    // cout<<"NEW CHOSEN TX RATEEEEEE:::::" <<SU[i].chosenTxRate<< endl;
-                    // cout<<"NEW CHOSEN TX RATEEEEEE:::::" <<SU[i].TxRates[SU[i].chosenTxRate]<< endl;
+//                 }
+//             }else if(SU[i].urgency == 2 && SU[i].dataRateClass == 1){
+//                 // cout<< "SU["<< i<< "]: collisionCounterEvery5TimeSlots: "<< SU[i].collisionCounterEvery5TimeSlots<< endl;
+//                 if(SU[i].collisionCounterEvery5TimeSlots >= 2){
+//                     // choose slower TX number
+//                     SU[i].chooseTxRate(SU[i].TxRates, "decreaseTxRate");
+//                     // cout<< "BEST EFFORT SU["<< to_string(i)<< "]: on Band: "<<SU[i].selectedBand<< ": Decreased Quality"<< endl;
+//                     // cout<<"NEW CHOSEN TX RATEEEEEE:::::" <<SU[i].chosenTxRate<< endl;
+//                     // cout<<"NEW CHOSEN TX RATEEEEEE:::::" <<SU[i].TxRates[SU[i].chosenTxRate]<< endl;
 
-                }else{
-                    // choose higher TX number
-                    SU[i].chooseTxRate(SU[i].TxRates, "increaseTxRate");
-                    // cout<< "BEST EFFORT SU["<< to_string(i)<< "]: on Band: "<<SU[i].selectedBand<< ": Increased Quality"<< endl;
-                    // cout<<"NEW CHOSEN TX RATEEEEEE:::::" <<SU[i].chosenTxRate<< endl;
-                    // cout<<"NEW CHOSEN TX RATEEEEEE:::::" <<SU[i].TxRates[SU[i].chosenTxRate]<< endl;
+//                 }else{
+//                     // choose higher TX number
+//                     SU[i].chooseTxRate(SU[i].TxRates, "increaseTxRate");
+//                     // cout<< "BEST EFFORT SU["<< to_string(i)<< "]: on Band: "<<SU[i].selectedBand<< ": Increased Quality"<< endl;
+//                     // cout<<"NEW CHOSEN TX RATEEEEEE:::::" <<SU[i].chosenTxRate<< endl;
+//                     // cout<<"NEW CHOSEN TX RATEEEEEE:::::" <<SU[i].TxRates[SU[i].chosenTxRate]<< endl;
 
-                }
+//                 }
 
-            }
-        }
-        // if(SU[i].pktGenerationRate ==-1){ //TYPE BULKY uninterruptible
+//             }
+//         }
+//         // if(SU[i].pktGenerationRate ==-1){ //TYPE BULKY uninterruptible
 
-        //     if(t%10 == 0 && t!=0){
-        //         // cout<< "SU["<< i<< "]: collisionCounterEvery5TimeSlots: "<< SU[i].collisionCounterEvery5TimeSlots<< endl;
-        //         if(SU[i].collisionCounterEvery5TimeSlots >= 2){
-        //             // choose slower TX number
-        //             SU[i].chooseTxRate(SU[i].TxRates, "decreaseTxRate");
-        //             SU[i].choosePktPeriod(SU[i].periodsForBulky, "decreaseQuality");
+//         //     if(t%10 == 0 && t!=0){
+//         //         // cout<< "SU["<< i<< "]: collisionCounterEvery5TimeSlots: "<< SU[i].collisionCounterEvery5TimeSlots<< endl;
+//         //         if(SU[i].collisionCounterEvery5TimeSlots >= 2){
+//         //             // choose slower TX number
+//         //             SU[i].chooseTxRate(SU[i].TxRates, "decreaseTxRate");
+//         //             SU[i].choosePktPeriod(SU[i].periodsForBulky, "decreaseQuality");
 
-        //         }else{
-        //             // choose higher TX number
-        //             SU[i].chooseTxRate(SU[i].TxRates, "increaseTxRate");
-        //             SU[i].choosePktPeriod(SU[i].periodsForBulky, "increaseQuality");
+//         //         }else{
+//         //             // choose higher TX number
+//         //             SU[i].chooseTxRate(SU[i].TxRates, "increaseTxRate");
+//         //             SU[i].choosePktPeriod(SU[i].periodsForBulky, "increaseQuality");
 
-        //         }
-        //     }
-        // }else{ // URGENT and BULKY interruptible SU's
+//         //         }
+//         //     }
+//         // }else{ // URGENT and BULKY interruptible SU's
 
 
-        //     if(SU[i].urgency == 2 && SU[i].dataRateClass == 1){ //Best effort
-        //         if(t%10 == 0 && t!=0){
-        //             // cout<< "SU["<< i<< "]: collisionCounterEvery5TimeSlots: "<< SU[i].collisionCounterEvery5TimeSlots<< endl;
-        //             if(SU[i].collisionCounterEvery5TimeSlots >= 2){
-        //                 // choose slower TX number
-        //                 SU[i].chooseTxRate(SU[i].TxRates, "decreaseTxRate");
-        //             }else{
-        //                 // choose higher TX number
-        //                 SU[i].chooseTxRate(SU[i].TxRates, "increaseTxRate");
-        //             }
-        //         }
-        //     }
-        // }
+//         //     if(SU[i].urgency == 2 && SU[i].dataRateClass == 1){ //Best effort
+//         //         if(t%10 == 0 && t!=0){
+//         //             // cout<< "SU["<< i<< "]: collisionCounterEvery5TimeSlots: "<< SU[i].collisionCounterEvery5TimeSlots<< endl;
+//         //             if(SU[i].collisionCounterEvery5TimeSlots >= 2){
+//         //                 // choose slower TX number
+//         //                 SU[i].chooseTxRate(SU[i].TxRates, "decreaseTxRate");
+//         //             }else{
+//         //                 // choose higher TX number
+//         //                 SU[i].chooseTxRate(SU[i].TxRates, "increaseTxRate");
+//         //             }
+//         //         }
+//         //     }
+//         // }
 
-    }
-}
+//     }
+// }
 void candidateBandsWeights(vector <SecondaryUser> &SU){
     vector <double> weights;
     for(int i=0; i< SU.size(); i++){
@@ -984,7 +1016,7 @@ int main(){
         //**********************************************************
         //****** Take Decision to increase/Decrease DataRate *****
         //**********************************************************
-        TakeDecisionDataRate(SU,t);
+        // TakeDecisionDataRate(SU,t);
 
         //**********************************************************
         //************ Take Decision Stay or Relinquish **********

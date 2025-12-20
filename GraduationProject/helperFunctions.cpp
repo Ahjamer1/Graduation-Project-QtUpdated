@@ -34,6 +34,16 @@ vector<unsigned int> selectRandomValues(vector<unsigned int>& values, int numSel
     return selected;
 }
 
+// Function to choose a single random value between 0 and max_number (FOR SHIFT CHOOSING)
+unsigned int selectRandomValue(unsigned int max_number) {
+    // uniform_int_distribution ensures every number has an EQUAL probability
+    // The range is [0, max_number] (inclusive)
+    uniform_int_distribution<unsigned int> distribution(0, max_number);
+
+    return distribution(randEngine);
+}
+
+
 void printVector(vector<unsigned int> vec, string msg) {
     cout << msg << endl;
     for (int i = 0; i < vec.size(); i++) {

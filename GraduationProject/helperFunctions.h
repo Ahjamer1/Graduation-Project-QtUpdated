@@ -19,7 +19,7 @@ extern std::mt19937_64 randEngine;
 // Helper function declarations
 pair<double, double> chooseProbabilityToGeneratePKT();
 vector<unsigned int> selectRandomValues(vector<unsigned int>& values, int numSelections);
-
+unsigned int selectRandomValue(unsigned int max_number);
 void printVector(vector<unsigned int> vec, string msg);
 void printVector(vector<double> vec, string msg);
 bool randomCoinFlipper(double probability);
