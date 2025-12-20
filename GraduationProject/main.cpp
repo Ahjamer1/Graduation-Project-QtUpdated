@@ -14,7 +14,7 @@
 using namespace std;
 // parameters
 const int numberOfSU = 20;
-const double numberOfBands = 20;
+const double numberOfBands = 10;
 // vector <double> numofBands ={5,10,25};
 const int numberOfPU = numberOfBands;
 const double numberOfTimeSlots = 500;
@@ -31,8 +31,10 @@ int SensedBandsSUPerspectiveHistorySize = 25;
 int PuBehaviorHistorySize=10;
 const int offtime=5;
 double DutyCycleDeterministic=0.5;
-double MaxQueueSize = 20;
+double MaxQueueSize = 50;
 double PossiblePacketDroppedSize=20;
+double DecayingTime=100;
+double BandTrustFactor=10;
 
 class Parameters {
 public:
@@ -106,7 +108,7 @@ public:
     // 1. 00 => summation = 0
     // 2. 11 => summation = 2
     // 3. 21 => summation  = 3
-    queue <Packet> pktqueue;  // instantiate an empty queue of integers
+    deque <Packet> pktqueue;  // instantiate an empty queue of integers
 
     double pktGenerationRate;
     void fillpktGenerationRate(){
@@ -125,7 +127,7 @@ public:
         if( this->urgency ==1 && this->dataRateClass == 1 || this->urgency ==2 && this->dataRateClass == 1){
             if (this->pktqueue.size()< MaxQueueSize)
             {
-                this->pktqueue.push(pkt);
+                this->pktqueue.push_back(pkt);
                 this->PossiblePacketsDropped.push_back(0);
 
             }
@@ -133,15 +135,15 @@ public:
 
             else
             {
-                this->pktqueue.push(pkt);
-                this->pktqueue.pop();
+                this->pktqueue.push_back(pkt);
+                this->pktqueue.pop_front();
                 this->NumOfPacketsDropped++;
                 this->PossiblePacketsDropped.push_back(1);
 
             }
             this->PossiblePacketsDropped.pop_front();
         }else{
-            this->pktqueue.push(pkt);
+            this->pktqueue.push_back(pkt);
         }
     }
 
@@ -259,19 +261,22 @@ public:
     //**********************************************************
 
     vector <double> weights;
+    deque <unsigned int> PossiblePacketsDropped;
     //Su Specific Performance parameters//
     double CollisionsWeight;
     double QueueSizeWeight;
     double NumOfPacketsDroppedWeight;
+    double AvgPacketWaitingTimeWeight;
     double RelinquishingTendency;
-    deque <unsigned int> PossiblePacketsDropped;
+    vector <double> BandsExperienceHistory;
 
 
     SecondaryUser():
         collisionCounterHistoryPerSU(collisionCounterHistoryPerSUSize, 0),
         bandsAsSeenBySU(numberOfBands, 0),
         SensedBandsSUPerspectiveHistory(SensedBandsSUPerspectiveHistorySize, std::vector<unsigned int>(numberOfBands, 0)),
-        weights(numberOfBands, 0),BandsRankingSeenByEachSu(numberOfBands,0),PossiblePacketsDropped(PossiblePacketDroppedSize,0)
+        weights(numberOfBands, 0),BandsRankingSeenByEachSu(numberOfBands,0),PossiblePacketsDropped(PossiblePacketDroppedSize,0),
+        BandsExperienceHistory(numberOfBands,0)
 
     {
         // constructor body (optional)
@@ -337,7 +342,7 @@ int PUInitDeterministic (vector<Band>& PU,int time,double DC)
         }
         else
             PU[i].PUState=false;
-        cout<<PU[i].PUState<<" ";
+        // cout<<PU[i].PUState<<" ";
         PU[i].PuBehaviorHistory.pop_front();
         PU[i].PuBehaviorHistory.push_back(PU[i].PUState);
         double c=0;
@@ -559,6 +564,11 @@ vector <unsigned int> allocationFunction(vector <Band> &PU, vector<SecondaryUser
                 SU[i].collisionCounterHistoryPerSU.pop_front();
                 SU[i].collisionCounterHistoryPerSU.push_back(1);
                 SU[i].counterTxRate= SU[i].chooseTxRate(SU[i].TxRates, "");
+                if (SU[i].BandsExperienceHistory[SU[i].selectedBand]>=BandTrustFactor) // bigger than 10 to ensure it does not become negative, 0 means the band is really bad
+                {
+                    SU[i].BandsExperienceHistory[SU[i].selectedBand]=SU[i].BandsExperienceHistory[SU[i].selectedBand]-BandTrustFactor;
+                }
+
             }else{
                 if(SU[i].pktqueue.size()> 0 && SU[i].counterTxRate== 0){
                     if(i==3){
@@ -574,8 +584,13 @@ vector <unsigned int> allocationFunction(vector <Band> &PU, vector<SecondaryUser
                         test4[counter4] =1;
                     }
 
+                    if (SU[i].BandsExperienceHistory[SU[i].selectedBand]<=100-BandTrustFactor) // less than 90 to ensure it does not overshoot to higher than 1, 1 means the band is very good
+                    {
+                        SU[i].BandsExperienceHistory[SU[i].selectedBand]=SU[i].BandsExperienceHistory[SU[i].selectedBand]+BandTrustFactor;
+                    }
+
                     Packet poppedPacket = SU[i].pktqueue.front();
-                    SU[i].pktqueue.pop();
+                    SU[i].pktqueue.pop_front();
                     SU[i].NumOfPacketsSent++;
                     poppedPacket.pktArrivalTime = t;
                     poppedPacket.pktWaitingTimeInQueue = poppedPacket.pktArrivalTime - poppedPacket.pktGenerationTime;
@@ -711,10 +726,17 @@ void CalculateSuSpecificParameters (vector <SecondaryUser> &SU, int t)
             if (SU[i].PossiblePacketsDropped[k]==1)
                 counter2++;
         }
+        double counter3=0;
+        for (int x=0;x<SU[i].pktqueue.size();x++)
+
+        {
+            counter3=counter3+min(t-SU[i].pktqueue[x].pktGenerationTime,int(MaxQueueSize));
+        }
         SU[i].CollisionsWeight=counter/collisionCounterHistoryPerSUSize; //gives a higher weight if the su suffered more collision
         SU[i].QueueSizeWeight=SU[i].pktqueue.size()/MaxQueueSize;//Higher weight if the SU has more packets in the queue
         SU[i].NumOfPacketsDroppedWeight=counter2/PossiblePacketDroppedSize;//higher percentage of dropped packets gives higher weight,however we might have to make it more dynamic instead of accoutning for every single packet
         SU[i].RelinquishingTendency=(SU[i].CollisionsWeight+SU[i].QueueSizeWeight+SU[i].NumOfPacketsDroppedWeight)/3;
+        SU[i].AvgPacketWaitingTimeWeight=counter3/(MaxQueueSize*SU[i].pktqueue.size());
     }
 }
 void TakeDecisionStayOrRelinquish(vector <SecondaryUser> &SU, int t){
@@ -859,7 +881,24 @@ void TakeDecisionStayOrRelinquish(vector <SecondaryUser> &SU, int t){
     }
 }
 
+void SuBandExperienceUpdate (vector <SecondaryUser> &SU)
+{
+    for (int i=0;i<SU.size();i++)
+    {
+        for (int k=0;k<numberOfBands;k++)
+        {
+            if (k==SU[i].selectedBand)
+                continue;
+            else
+                if (SU[i].BandsExperienceHistory[k]>0)
+                SU[i].BandsExperienceHistory[k]=SU[i].BandsExperienceHistory[k]-1;
 
+        }
+
+
+    }
+
+}
 //INTELLIGENCE
 // void TakeDecisionDataRate(vector <SecondaryUser> &SU, int t){
 //     for(int i=0; i< SU.size(); i++){
@@ -1000,12 +1039,23 @@ int main(){
         //**********************************************************
         generatePKTS(SU, t);
         CalculateSuSpecificParameters (SU,t);
+        cout<<"SU[3].AvgPacketWaitingTimeWeight :";
+        cout<<SU[3].AvgPacketWaitingTimeWeight;
+        cout<<endl;
 
 
         //**********************************************************
         //***************** Allocation Function ****************
         //**********************************************************
         vector <unsigned int> TXFreqArray= allocationFunction(PU, SU,t);
+        SuBandExperienceUpdate(SU);
+        cout<<"Bands Experience: ";
+        for (int i=0;i<numberOfBands;i++)
+        {
+            cout<<SU[3].BandsExperienceHistory[i]<<" ";
+        }
+        cout<<endl;
+
 
 
         //**********************************************************
@@ -1061,6 +1111,7 @@ int main(){
         UtilizationCalculator(t,TXFreqArray,Utilization.AvgPerTimeSlot,Utilization.AvgPerBand);
 
 
+
         // for(int i=0; i< SU[0].SensedBandsSUPerspectiveHistory.size(); i++){
         //     printVector(SU[0].SensedBandsSUPerspectiveHistory[i], "history: ");
         // }
@@ -1113,7 +1164,6 @@ int main(){
     }
     // printVector(Fairness.AvgPerSU,"Packets sent over generated for each su");
     // printVector(NumberofPacketsDropped.AvgPerSU,"Packets Dropped for each su");
-
 
 
 
