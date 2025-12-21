@@ -17,7 +17,7 @@ const int numberOfSU = 20;
 const double numberOfBands = 10;
 // vector <double> numofBands = {5,10,25};
 const int numberOfPU = numberOfBands;
-const double numberOfTimeSlots = 2000;
+const double numberOfTimeSlots = 200;
 const double durationOfTimeSlot = 0.01;
 const int numberOfBandsPerSU = 1;
 vector <double> PuActiveProb={0.2,0.4,0.5,0.6};
@@ -908,7 +908,7 @@ vector<unsigned int> getHigherValues(vector<double> nums, int target_index) {
 
 
 //INTELLIGENCE
-void CalculateSuSpecificParameters (vector <SecondaryUser> &SU, int t)
+void CalculateSuSpecificParameters (vector <SecondaryUser> &SU, int t,vector <double> &Urgent,vector <double> &Camera,vector <double> &BestEffort)
 {
     for (int i=0;i<SU.size();i++)
     {
@@ -939,6 +939,18 @@ void CalculateSuSpecificParameters (vector <SecondaryUser> &SU, int t)
             SU[i].AvgPacketWaitingTimeWeight=0;
         }
         SU[i].RelinquishingTendency=(SU[i].CollisionsWeight+SU[i].QueueSizeWeight+SU[i].NumOfPacketsDroppedWeight + SU[i].AvgPacketWaitingTimeWeight)/4;
+        if (i==0)
+        {
+            Urgent[t]=SU[i].RelinquishingTendency;
+        }
+        if (i==5)
+        {
+            Camera[t]=SU[i].RelinquishingTendency;
+        }
+        if (i==14)
+        {
+            BestEffort[t]=SU[i].RelinquishingTendency;
+        }
     }
 }
 void TakeDecisionStayOrRelinquish(vector <SecondaryUser> &SU, int t){
@@ -1237,6 +1249,10 @@ int main(){
     Parameters Throughput;
     Parameters NumberofPacketsDropped;
     Parameters Fairness;
+    Parameters RelinquishingTendencyUrgent;
+    Parameters RelinquishingTendencyCamera;
+    Parameters RelinquishingTendencyBestEffort;
+
     StartingPositions=AssignStartingPositions(numberOfBands,1,numberOfBands);
     //initialize system
     initializeSystem();
@@ -1260,7 +1276,7 @@ int main(){
         //******************** Generate Packets ****************
         //**********************************************************
         generatePKTS(SU, t);
-        CalculateSuSpecificParameters (SU,t);
+        CalculateSuSpecificParameters (SU,t,RelinquishingTendencyUrgent.AvgPerTimeSlot,RelinquishingTendencyCamera.AvgPerTimeSlot,RelinquishingTendencyBestEffort.AvgPerTimeSlot);
         // cout<<"SU[3].AvgPacketWaitingTimeWeight :";
         // cout<<SU[3].AvgPacketWaitingTimeWeight;
         // cout<<endl;
@@ -1468,6 +1484,33 @@ int main(){
 
     }
     File9.close();
+    filename="C:\\Users\\bobte\\Graduation-Project-QtUpdated\\txtfiles\\RelinquishingTendencyUrgentSU.txt";
+    ofstream File10 (filename);
+    for (int i=0;i<RelinquishingTendencyUrgent.AvgPerTimeSlot.size();i++)
+    {
+        File10<<RelinquishingTendencyUrgent.AvgPerTimeSlot[i]<<" ";
+
+    }
+    File10.close();
+    filename="C:\\Users\\bobte\\Graduation-Project-QtUpdated\\txtfiles\\RelinquishingTendencyCameraSU.txt";
+    ofstream File11 (filename);
+    for (int i=0;i<RelinquishingTendencyCamera.AvgPerTimeSlot.size();i++)
+    {
+        File11<<RelinquishingTendencyCamera.AvgPerTimeSlot[i]<<" ";
+
+    }
+    File11.close();
+    filename="C:\\Users\\bobte\\Graduation-Project-QtUpdated\\txtfiles\\RelinquishingTendencyBestEffort.txt";
+    ofstream File12 (filename);
+    for (int i=0;i<RelinquishingTendencyBestEffort.AvgPerTimeSlot.size();i++)
+    {
+        File12<<RelinquishingTendencyBestEffort.AvgPerTimeSlot[i]<<" ";
+
+    }
+    File12.close();
+
+
+
 
 
 
