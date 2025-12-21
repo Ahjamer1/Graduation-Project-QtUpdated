@@ -17,7 +17,7 @@ const int numberOfSU = 20;
 const double numberOfBands = 10;
 // vector <double> numofBands = {5,10,25};
 const int numberOfPU = numberOfBands;
-const double numberOfTimeSlots = 5000;
+const double numberOfTimeSlots = 2000;
 const double durationOfTimeSlot = 0.01;
 const int numberOfBandsPerSU = 1;
 vector <double> PuActiveProb={0.2,0.4,0.5,0.6};
@@ -1394,6 +1394,85 @@ int main(){
 
 
     // *********************************Writing Into Files*******************************************//
+    string filename="C:\\Users\\bobte\\Graduation-Project-QtUpdated\\txtfiles\\Collisions.txt";
+    ofstream File1 (filename);
+    for (int i=0;i<Collisions.AvgPerTimeSlot.size();i++)
+    {
+        File1<<Collisions.AvgPerTimeSlot[i]<<" ";
+
+    }
+    File1.close();
+
+    filename="C:\\Users\\bobte\\Graduation-Project-QtUpdated\\txtfiles\\TotalPacketsEachTimeSlot.txt";
+    ofstream File2 (filename);
+    for (int i=0;i<TotalPackets.AvgPerTimeSlot.size();i++)
+    {
+        File2<<TotalPackets.AvgPerTimeSlot[i]<< " ";
+
+    }
+    File2.close();
+    filename="C:\\Users\\bobte\\Graduation-Project-QtUpdated\\txtfiles\\ThroughPutAvgTimeSlot.txt";
+    ofstream File3 (filename);
+    for (int i=0;i<Throughput.AvgPerTimeSlot.size();i++)
+    {
+        File3<<Throughput.AvgPerTimeSlot[i]<< " ";
+
+    }
+    File3.close();
+    filename="C:\\Users\\bobte\\Graduation-Project-QtUpdated\\txtfiles\\ThroughPutAvgBand.txt";
+    ofstream File4 (filename);
+    for (int i=0;i<Throughput.AvgPerBand.size();i++)
+    {
+        File4<<Throughput.AvgPerBand[i]<< " ";
+
+    }
+    File4.close();
+    filename="C:\\Users\\bobte\\Graduation-Project-QtUpdated\\txtfiles\\UtilizationAvgTimeSlot.txt";
+    ofstream File5 (filename);
+    for (int i=0;i<Utilization.AvgPerTimeSlot.size();i++)
+    {
+        File5<<Utilization.AvgPerTimeSlot[i]<< " ";
+
+    }
+    File5.close();
+    filename="C:\\Users\\bobte\\Graduation-Project-QtUpdated\\txtfiles\\UtilizationAvgBand.txt";
+    ofstream File6 (filename);
+    for (int i=0;i<Utilization.AvgPerBand.size();i++)
+    {
+        File6<<Utilization.AvgPerBand[i]<< " ";
+
+    }
+    File6.close();
+    filename="C:\\Users\\bobte\\Graduation-Project-QtUpdated\\txtfiles\\NumberOfPacketsDroppedPerSu.txt";
+    ofstream File7 (filename);
+    for (int i=0;i<NumberofPacketsDropped.AvgPerSU.size();i++)
+    {
+        File7<<NumberofPacketsDropped.AvgPerSU[i]<< " ";
+
+    }
+    File7.close();
+
+    filename="C:\\Users\\bobte\\Graduation-Project-QtUpdated\\txtfiles\\FairnessPerSu.txt";
+    ofstream File8 (filename);
+    for (int i=0;i<Fairness.AvgPerSU.size();i++)
+    {
+        File8<<Fairness.AvgPerSU[i]<< " ";
+
+    }
+    File8.close();
+    filename="C:\\Users\\bobte\\Graduation-Project-QtUpdated\\txtfiles\\AvgPacketWaitingTimePerSu.txt";
+    ofstream File9 (filename);
+    for (int i=0;i<WaitingTime.AvgPacketWaitingTime.size();i++)
+    {
+        File9<<WaitingTime.AvgPacketWaitingTime[i]<< " ";
+
+    }
+    File9.close();
+
+
+
+
+
 
 
 
