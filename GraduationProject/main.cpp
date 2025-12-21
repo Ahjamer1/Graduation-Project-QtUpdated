@@ -17,7 +17,7 @@ const int numberOfSU = 20;
 const double numberOfBands = 10;
 // vector <double> numofBands = {5,10,25};
 const int numberOfPU = numberOfBands;
-const double numberOfTimeSlots = 500;
+const double numberOfTimeSlots = 5000;
 const double durationOfTimeSlot = 0.01;
 const int numberOfBandsPerSU = 1;
 vector <double> PuActiveProb={0.2,0.4,0.5,0.6};
@@ -95,12 +95,12 @@ public:
     double NumOfPacketsSent=0;
     int numberOfTimesDecreasedTXRATE = 0;
     int shift = 0;
-
-    vector <unsigned int> periodsForBulky = {0,1,4,9,14};
+// {1, 2, 4, 6, 10, 12, 16, 18, 22};
+    vector <unsigned int> periodsForBulky = {0,1,4,10,16};
     // periodsForBulky generates a packet every 1, 2, 5, 10, 15 (0,1,4,9,14 are set for counting purposes)
 
     // CHANGED: Fixed values to align with periodsForBulky (Shift by 1 fix)
-    vector <unsigned int> TxRates = {0,1,4,9,14}; // the value "0" means "1" which means: every time slot(fastest) / the value "0" means "2" which means: ON OFF ON OFF
+    vector <unsigned int> TxRates = {0,1,4,10,16}; // the value "0" means "1" which means: every time slot(fastest) / the value "0" means "2" which means: ON OFF ON OFF
     // TxRates transmits a packet every 1, 2, 5, 10, 15 (0,1,4,9,19 are set for counting purposes)
 
     // CHANGED: Added indices to track current Quality Level
@@ -275,7 +275,7 @@ public:
         bandsAsSeenBySU(numberOfBands, 0),
         SensedBandsSUPerspectiveHistory(SensedBandsSUPerspectiveHistorySize, std::vector<unsigned int>(numberOfBands, 0)),
         weights(numberOfBands, 0),BandsRankingSeenByEachSu(numberOfBands,0),PossiblePacketsDropped(PossiblePacketDroppedSize,0),
-        BandsExperienceHistory(numberOfBands,0)
+        BandsExperienceHistory(numberOfBands,50)
 
     {
         // constructor body (optional)
@@ -715,7 +715,7 @@ vector <unsigned int> allocationFunction(vector <Band> &PU, vector<SecondaryUser
                 updateBandScore(SU[i], SU[i].selectedBand, false); // false = collision (0 reward)
                 // 1. Force a random delay (Backoff) to desynchronize
                 // Randomly wait between 2 to 10 slots before trying again
-                int backoff = std::uniform_int_distribution<int>(2, 10)(randEngine);
+                int backoff = std::uniform_int_distribution<int>(2, 5)(randEngine);
                 SU[i].shift += backoff;
 
             }else{
@@ -1093,11 +1093,24 @@ void SuBandExperienceUpdate (vector <SecondaryUser> &SU)
     {
         for (int k=0;k<numberOfBands;k++)
         {
-            // Only decay bands we are NOT currently using
-            if(k!= SU[i].selectedBand){
-                // Decay towards neutral (50), not towards 0
-                SU[i].BandsExperienceHistory[k] = (SU[i].BandsExperienceHistory[k] * decayRate) + (neutralVal * (1 - decayRate));
+            // 1. We skip the currently selected band (it gets updated by updateBandScore, not decay).
+            // 2. We skip bands that are already at neutralVal (50).
+            //    Since we fixed the constructor to init at 50, unvisited bands will hit this 'continue'
+            //    and will NOT be touched.
+
+            if(k == SU[i].selectedBand) {
+                continue;
             }
+
+            // Check if it is already 50 (or extremely close to it)
+            if(abs(SU[i].BandsExperienceHistory[k] - neutralVal) < 0.001) {
+                continue; // It is already neutral/unvisited, leave it alone.
+            }
+
+            // Apply Decay towards Neutral
+            // If History is 100 -> moves to 99.5
+            // If History is 0   -> moves to 0.5
+            SU[i].BandsExperienceHistory[k] = (SU[i].BandsExperienceHistory[k] * decayRate) + (neutralVal * (1.0 - decayRate));
         }
 
 
