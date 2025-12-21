@@ -24,7 +24,7 @@ vector <double> PuActiveProb={0.2,0.4,0.5,0.6};
 double probOffToOn = 0.01;//never change this
 unsigned int seed = 123;
 std::mt19937_64 randEngine(seed);
-int checkPeriod = 20;
+int checkPeriod = 10;
 vector <unsigned int> StartingPositions;        //To choose random starting positions , change later for 100 bands
 int collisionCounterHistoryPerSUSize = 10;
 int SensedBandsSUPerspectiveHistorySize = checkPeriod;
