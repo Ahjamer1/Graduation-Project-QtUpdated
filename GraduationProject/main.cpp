@@ -17,14 +17,14 @@ const int numberOfSU = 20;
 const double numberOfBands = 10;
 // vector <double> numofBands = {5,10,25};
 const int numberOfPU = numberOfBands;
-const double numberOfTimeSlots = 200;
+const double numberOfTimeSlots = 30000;
 const double durationOfTimeSlot = 0.01;
 const int numberOfBandsPerSU = 1;
 vector <double> PuActiveProb={0.2,0.4,0.5,0.6};
 double probOffToOn = 0.01;//never change this
 unsigned int seed = 123;
 std::mt19937_64 randEngine(seed);
-int checkPeriod = 10;
+int checkPeriod = 20;
 vector <unsigned int> StartingPositions;        //To choose random starting positions , change later for 100 bands
 int collisionCounterHistoryPerSUSize = 10;
 int SensedBandsSUPerspectiveHistorySize = checkPeriod;
@@ -95,7 +95,7 @@ public:
     double NumOfPacketsSent=0;
     int numberOfTimesDecreasedTXRATE = 0;
     int shift = 0;
-// {1, 2, 4, 6, 10, 12, 16, 18, 22};
+    // {1, 2, 4, 6, 10, 12, 16, 18, 22};
     vector <unsigned int> periodsForBulky = {0,1,4,10,16};
     // periodsForBulky generates a packet every 1, 2, 5, 10, 15 (0,1,4,9,14 are set for counting purposes)
 
@@ -190,7 +190,7 @@ public:
                     newTxIndex = selectRandomValues(RatesToChooseFrom,1)[0];
                 }
             }
-            cout<< endl<< "INCREASED TXRATE"<< endl<< endl;
+            // cout<< endl<< "INCREASED TXRATE"<< endl<< endl;
         }else if(actionToTake == "decreaseQuality" || actionToTake == "decreaseTxRate"){
             if(newTxIndex < this->TxRates.size()-1){
                 for(int i=newTxIndex + 1; i< this->TxRates.size(); i++){ // changed limit to size()
@@ -200,7 +200,7 @@ public:
                     newTxIndex = selectRandomValues(RatesToChooseFrom,1)[0];
                 }
             }
-            cout<< endl<< "DECREASED TXRATE"<< endl<< endl;
+            // cout<< endl<< "DECREASED TXRATE"<< endl<< endl;
         }
 
         // 2. APPLY LOGIC BASED ON URGENCY (The Split)
@@ -347,10 +347,12 @@ int PUInitDeterministic (vector<Band>& PU,int time,double DC)
     { if  ((((time-StartingPositions[i])%(ActiveTime+offtime)<ActiveTime)&&time>=StartingPositions[i]))//variable for 10
         {
             PU[i].PUState=true;
+            // counter++;
+        }
+        else{
+            PU[i].PUState=false;
             counter++;
         }
-        else
-            PU[i].PUState=false;
         // cout<<PU[i].PUState<<" ";
         PU[i].PuBehaviorHistory.pop_front();
         PU[i].PuBehaviorHistory.push_back(PU[i].PUState);
@@ -570,8 +572,8 @@ vector <unsigned int> allocationFunction(vector <Band> &PU, vector<SecondaryUser
                     SU[i].selectedBand = rankedCandidates[chosenIndex].second;
 
                     // cout<< "SU["<< i<< "]: selectedBand:"<< SU[i].selectedBand<< endl;
-                    cout << "SU[" << i << "] Intelligent Selection: Band " << SU[i].selectedBand
-                         << " (Score: " << rankedCandidates[chosenIndex].first << ")" << endl;
+                    // cout << "SU[" << i << "] Intelligent Selection: Band " << SU[i].selectedBand
+                    //      << " (Score: " << rankedCandidates[chosenIndex].first << ")" << endl;
                     occupiedBands[SU[i].selectedBand]+=1;
 
 
@@ -629,10 +631,10 @@ vector <unsigned int> allocationFunction(vector <Band> &PU, vector<SecondaryUser
                     // Reset the Tx Counter immediately based on new decision
                     SU[i].counterTxRate = SU[i].getTxCounterVal();
 
-                    cout << "   -> Rate Adaptation: Avail=" << availability
-                         << ", MinWait=" << minWaitTime
-                         << ", ChosenWait=" << chosenWaitTime
-                         << ", Shift=" << SU[i].shift << endl;
+                    // cout << "   -> Rate Adaptation: Avail=" << availability
+                    //      << ", MinWait=" << minWaitTime
+                    //      << ", ChosenWait=" << chosenWaitTime
+                    //      << ", Shift=" << SU[i].shift << endl;
 
                 }
             }
@@ -1028,23 +1030,23 @@ void TakeDecisionStayOrRelinquish(vector <SecondaryUser> &SU, int t){
             if(t % checkPeriod == 0){
                 if(SU[i].dataRateClass == 1){ // CAMERA OR BEST EFFORT
                     // CHECK PERFORMANCE
-                    cout<< "LOOK HERE!!!!!!"<< SU[i].RelinquishingTendency<< endl;
-                    cout<< "SU12: "<< SU[12].pktqueue.size()<< endl;
-                    cout<< "SU12: "<< SU[12].AvgPacketWaitingTimeWeight<< endl;
-                    cout<< "SU12: "<< SU[12].CollisionsWeight<< endl;
-                    cout<< "SU12: "<< SU[12].NumOfPacketsDroppedWeight<< endl;
+                    // cout<< "LOOK HERE!!!!!!"<< SU[i].RelinquishingTendency<< endl;
+                    // cout<< "SU12: "<< SU[12].pktqueue.size()<< endl;
+                    // cout<< "SU12: "<< SU[12].AvgPacketWaitingTimeWeight<< endl;
+                    // cout<< "SU12: "<< SU[12].CollisionsWeight<< endl;
+                    // cout<< "SU12: "<< SU[12].NumOfPacketsDroppedWeight<< endl;
 
                     if(SU[i].RelinquishingTendency < 0.4){
-                    // ****************************************************
-                    // SU IS DOING WELL IN BAND, SO INCREASE TXRATE
-                    // ****************************************************
+                        // ****************************************************
+                        // SU IS DOING WELL IN BAND, SO INCREASE TXRATE
+                        // ****************************************************
                         if(SU[i].urgency == 1 || SU[i].urgency == 2){ // CAMERA OR BEST EFFORT
                             // CHANGED: Unified call
                             SU[i].adaptQuality("increaseQuality");
                             SU[i].shift = selectRandomValue(SU[i].getTxCounterVal());
                         }
-                    // ****************************************************
-                    // ****************************************************
+                        // ****************************************************
+                        // ****************************************************
                     }else if(SU[i].RelinquishingTendency >= 0.4){
 
                         if(!bandWithNoPUExists || BandsWithHigherScore.size() ==0){ // NO bands not occupied by a PU (all others have PU in them) OR NO bands with higher score than current band
@@ -1079,7 +1081,7 @@ void TakeDecisionStayOrRelinquish(vector <SecondaryUser> &SU, int t){
 
                             }else{
                                 // RELINQUISH
-                                cout<< "RELINQUISHED!!"<< endl;
+                                // cout<< "RELINQUISHED!!"<< endl;
                                 SU[i].selectedBand = -1;
                                 SU[i].numberOfTimesDecreasedTXRATE = 0;
                                 // CALL ACQUIRE BAND FUNCTION
@@ -1257,21 +1259,23 @@ int main(){
     //initialize system
     initializeSystem();
     // vector<vector<unsigned int>> pktgenerationrate(numberOfTimeSlots, vector<unsigned int>(SU.size(), 0));
+    int availableTimeSlots = 0;
     for(int t=0; t< numberOfTimeSlots; t++){ //TIMESLOTS LOOP
         cout<< "time slot: "<< t<< endl;
         // cout<< "TxRate for SU 2 is:"<<SU[2].counterTxRate<<endl;
         // PUInitMarkov(PU);
-        PUInitDeterministic(PU,t,DutyCycleDeterministic);
-        cout<< "PU activation at time slot: ";
-        for(int i=0; i< PU.size(); i++){
-            cout<< PU[i].PUState<< " ";
-        }
-        cout<< endl;
-        // cout<<endl;
-        // for (int i=0;i<PU.size();i++){
-        //     PU[i].PUState=0;
-        // }
+        // availableTimeSlots += PUInitDeterministic(PU,t,DutyCycleDeterministic);
 
+        // cout<< "PU activation at time slot: ";
+        // for(int i=0; i< PU.size(); i++){
+        //     cout<< PU[i].PUState<< " ";
+        // }
+        // cout<< endl;
+        // cout<<endl;
+        for (int i=0;i<PU.size();i++){
+            PU[i].PUState=0;
+        }
+        availableTimeSlots +=numberOfBands;
         //**********************************************************
         //******************** Generate Packets ****************
         //**********************************************************
@@ -1287,16 +1291,16 @@ int main(){
         //**********************************************************
         vector <unsigned int> TXFreqArray= allocationFunction(PU, SU,t);
         SuBandExperienceUpdate(SU);
-        cout<<"Bands Experience: ";
-        cout<< endl;
-        for(int k= 0; k< SU.size(); k++){
+        // cout<<"Bands Experience: ";
+        // cout<< endl;
+        // for(int k= 0; k< SU.size(); k++){
 
-        for (int i=0;i<numberOfBands;i++)
-        {
-            cout<<SU[k].BandsExperienceHistory[i]<<" ";
-        }
-        cout<<endl;
-}
+        //     for (int i=0;i<numberOfBands;i++)
+        //     {
+        //         cout<<SU[k].BandsExperienceHistory[i]<<" ";
+        //     }
+        //     cout<<endl;
+        // }
 
 
         //**********************************************************
@@ -1358,6 +1362,7 @@ int main(){
         // }
         // printVector(SU[0].weights,"weightsVector: ");
     }
+    cout<< "available time slots: "<< availableTimeSlots<< endl;
     // cout<<"All packets: "<< endl;
     // for(int i=0; i< SU.size(); i++){
     //     // cout<< "this is the length of queue for SU[" << i << "]: " << SU[i].pktqueue.size()<< endl;
@@ -1393,11 +1398,14 @@ int main(){
     // printVector(Throughput.AvgPerTimeSlot,"TimeSlot Average");
     // printVector(Throughput.AvgPerBand,"Band Average");
     // printDeQueue(PU[0].PuBehaviorHistory);
-
+    double totalNumberOfPktsGenerated = 0;
+    double avgThroughputPerSU = 0;
     for (int i=0;i<SU.size();i++)
     {
         cout<<"SU"<<i<<" PacketsGenerated:"<<SU[i].NumOfPacketsGenerated<<" ";
+        totalNumberOfPktsGenerated +=SU[i].NumOfPacketsGenerated;
         cout<<" PacketsSent:"<<SU[i].NumOfPacketsSent;
+        avgThroughputPerSU += SU[i].NumOfPacketsSent / SU[i].NumOfPacketsGenerated;
         cout<<" PacketsDropped:"<<SU[i].NumOfPacketsDropped;
         cout<<" Que Size: "<<SU[i].pktqueue.size();
         cout<<" RelinquishingTendency: "<<SU[i].RelinquishingTendency;
@@ -1406,11 +1414,15 @@ int main(){
     // printVector(Fairness.AvgPerSU,"Packets sent over generated for each su");
     // printVector(NumberofPacketsDropped.AvgPerSU,"Packets Dropped for each su");
 
+    cout<< "totalNumberOfPktsGenerated: "<< totalNumberOfPktsGenerated<< endl;
+    cout<< "Load is: "<< totalNumberOfPktsGenerated / availableTimeSlots<< endl;
+
+    cout<< "avgThroughputPerSU: "<< avgThroughputPerSU/ numberOfSU << endl;
 
 
 
     // *********************************Writing Into Files*******************************************//
-    string filename="C:\\Users\\bobte\\Graduation-Project-QtUpdated\\txtfiles\\Collisions.txt";
+    string filename="txtfiles/Collisions.txt";
     ofstream File1 (filename);
     for (int i=0;i<Collisions.AvgPerTimeSlot.size();i++)
     {
@@ -1419,7 +1431,7 @@ int main(){
     }
     File1.close();
 
-    filename="C:\\Users\\bobte\\Graduation-Project-QtUpdated\\txtfiles\\TotalPacketsEachTimeSlot.txt";
+    filename="txtfiles/TotalPacketsEachTimeSlot.txt";
     ofstream File2 (filename);
     for (int i=0;i<TotalPackets.AvgPerTimeSlot.size();i++)
     {
@@ -1427,7 +1439,7 @@ int main(){
 
     }
     File2.close();
-    filename="C:\\Users\\bobte\\Graduation-Project-QtUpdated\\txtfiles\\ThroughPutAvgTimeSlot.txt";
+    filename="txtfiles/ThroughPutAvgTimeSlot.txt";
     ofstream File3 (filename);
     for (int i=0;i<Throughput.AvgPerTimeSlot.size();i++)
     {
@@ -1435,7 +1447,7 @@ int main(){
 
     }
     File3.close();
-    filename="C:\\Users\\bobte\\Graduation-Project-QtUpdated\\txtfiles\\ThroughPutAvgBand.txt";
+    filename="txtfiles/ThroughPutAvgBand.txt";
     ofstream File4 (filename);
     for (int i=0;i<Throughput.AvgPerBand.size();i++)
     {
@@ -1443,7 +1455,7 @@ int main(){
 
     }
     File4.close();
-    filename="C:\\Users\\bobte\\Graduation-Project-QtUpdated\\txtfiles\\UtilizationAvgTimeSlot.txt";
+    filename="txtfiles/UtilizationAvgTimeSlot.txt";
     ofstream File5 (filename);
     for (int i=0;i<Utilization.AvgPerTimeSlot.size();i++)
     {
@@ -1451,7 +1463,7 @@ int main(){
 
     }
     File5.close();
-    filename="C:\\Users\\bobte\\Graduation-Project-QtUpdated\\txtfiles\\UtilizationAvgBand.txt";
+    filename="txtfiles/UtilizationAvgBand.txt";
     ofstream File6 (filename);
     for (int i=0;i<Utilization.AvgPerBand.size();i++)
     {
@@ -1459,7 +1471,7 @@ int main(){
 
     }
     File6.close();
-    filename="C:\\Users\\bobte\\Graduation-Project-QtUpdated\\txtfiles\\NumberOfPacketsDroppedPerSu.txt";
+    filename="txtfiles/NumberOfPacketsDroppedPerSu.txt";
     ofstream File7 (filename);
     for (int i=0;i<NumberofPacketsDropped.AvgPerSU.size();i++)
     {
@@ -1468,7 +1480,7 @@ int main(){
     }
     File7.close();
 
-    filename="C:\\Users\\bobte\\Graduation-Project-QtUpdated\\txtfiles\\FairnessPerSu.txt";
+    filename="txtfiles/FairnessPerSu.txt";
     ofstream File8 (filename);
     for (int i=0;i<Fairness.AvgPerSU.size();i++)
     {
@@ -1476,7 +1488,7 @@ int main(){
 
     }
     File8.close();
-    filename="C:\\Users\\bobte\\Graduation-Project-QtUpdated\\txtfiles\\AvgPacketWaitingTimePerSu.txt";
+    filename="txtfiles/AvgPacketWaitingTimePerSu.txt";
     ofstream File9 (filename);
     for (int i=0;i<WaitingTime.AvgPacketWaitingTime.size();i++)
     {
@@ -1484,7 +1496,7 @@ int main(){
 
     }
     File9.close();
-    filename="C:\\Users\\bobte\\Graduation-Project-QtUpdated\\txtfiles\\RelinquishingTendencyUrgentSU.txt";
+    filename="txtfiles/RelinquishingTendencyUrgentSU.txt";
     ofstream File10 (filename);
     for (int i=0;i<RelinquishingTendencyUrgent.AvgPerTimeSlot.size();i++)
     {
@@ -1492,7 +1504,7 @@ int main(){
 
     }
     File10.close();
-    filename="C:\\Users\\bobte\\Graduation-Project-QtUpdated\\txtfiles\\RelinquishingTendencyCameraSU.txt";
+    filename="txtfiles/RelinquishingTendencyCameraSU.txt";
     ofstream File11 (filename);
     for (int i=0;i<RelinquishingTendencyCamera.AvgPerTimeSlot.size();i++)
     {
@@ -1500,7 +1512,7 @@ int main(){
 
     }
     File11.close();
-    filename="C:\\Users\\bobte\\Graduation-Project-QtUpdated\\txtfiles\\RelinquishingTendencyBestEffort.txt";
+    filename="txtfiles/RelinquishingTendencyBestEffort.txt";
     ofstream File12 (filename);
     for (int i=0;i<RelinquishingTendencyBestEffort.AvgPerTimeSlot.size();i++)
     {
