@@ -14,10 +14,10 @@
 using namespace std;
 // parameters
 const int numberOfSU = 20;
-const double numberOfBands = 1;
+const double numberOfBands = 10;
 // vector <double> numofBands = {5,10,25};
 const int numberOfPU = numberOfBands;
-const double numberOfTimeSlots = 100;
+const double numberOfTimeSlots = 10000;
 const double durationOfTimeSlot = 0.01;
 const int numberOfBandsPerSU = 1;
 vector <double> PuActiveProb={0.2,0.4,0.5,0.6};
@@ -96,11 +96,11 @@ public:
     int numberOfTimesDecreasedTXRATE = 0;
     int shift = 0;
     // {1, 2, 4, 6, 10, 12, 16, 18, 22};
-    vector <unsigned int> periodsForBulky = {0,1,4,10,16};
+    vector <unsigned int> periodsForBulky = {0,1,4,6};
     // periodsForBulky generates a packet every 1, 2, 5, 10, 15 (0,1,4,9,14 are set for counting purposes)
 
     // CHANGED: Fixed values to align with periodsForBulky (Shift by 1 fix)
-    vector <unsigned int> TxRates = {0,1,4,10,16}; // the value "0" means "1" which means: every time slot(fastest) / the value "0" means "2" which means: ON OFF ON OFF
+    vector <unsigned int> TxRates = {0,1,4,6}; // the value "0" means "1" which means: every time slot(fastest) / the value "0" means "2" which means: ON OFF ON OFF
     // TxRates transmits a packet every 1, 2, 5, 10, 15 (0,1,4,9,19 are set for counting purposes)
 
     // CHANGED: Added indices to track current Quality Level
@@ -134,7 +134,6 @@ public:
             {
                 this->pktqueue.push_back(pkt);
                 this->PossiblePacketsDropped.push_back(0);
-
             }
 
 
@@ -147,7 +146,7 @@ public:
 
             }
             this->PossiblePacketsDropped.pop_front();
-        }else{
+        }else{ // Urgent
             this->pktqueue.push_back(pkt);
         }
     }
@@ -662,11 +661,11 @@ vector <unsigned int> allocationFunction(vector <Band> &PU, vector<SecondaryUser
                     SU[i].shift--;
                     if(SU[i].shift == 0){
                         SU[i].counterTxRate = 0;
+                         TXFreqArray[SU[i].selectedBand] += 1;
                     }
                 }
                 // 2. Handle Periodic Transmission (Only if shift is done)
                 else if(SU[i].shift == 0){
-
                     // If the counter is still running, decrement it
                     if(SU[i].counterTxRate > 0){
                         SU[i].counterTxRate--;
@@ -701,6 +700,8 @@ vector <unsigned int> allocationFunction(vector <Band> &PU, vector<SecondaryUser
         //     }
         // }
     }
+
+
 
     for(int i=0; i< SU.size(); i++){
         SU[i].fillbandsAsSeenBySU(TXFreqArray, t);
@@ -800,38 +801,34 @@ vector <unsigned int> allocationFunction(vector <Band> &PU, vector<SecondaryUser
 
 void generatePKTS(vector <SecondaryUser> &SU, int t){
     for(int i=0; i< SU.size(); i++){
-        // ***************************************************************
-        // 1. REALISTIC DROPS: TTL (Time-To-Live) CHECK
-        // ***************************************************************
-        // If a packet has been waiting too long, it "expires" and is dropped.
-        // This simulates latency sensitivity.
-        while(!SU[i].pktqueue.empty()){
-            // Check the packet at the front (oldest)
-            int waitingTime = t - SU[i].pktqueue.front().pktGenerationTime;
+        // If a packet has been waiting too long, it "expires" and is dropped. This simulates latency sensitivity.
+        if(SU[i].urgency == 1 && SU[i].dataRateClass == 1){ // CAMERA
+            while(!SU[i].pktqueue.empty()){
+                // Check the packet at the front (oldest)
+                int waitingTime = t - SU[i].pktqueue.front().pktGenerationTime;
 
-            // If waiting longer than allowed (DecayingTime), drop it
-            if(waitingTime > DecayingTime){
-                SU[i].pktqueue.pop_front();
-                SU[i].NumOfPacketsDropped++;
+                // If waiting longer than allowed (DecayingTime), drop it
+                if(waitingTime > DecayingTime){
+                    SU[i].pktqueue.pop_front();
+                    SU[i].NumOfPacketsDropped++;
 
-                // Track drop statistics (for your weighted param calculation)
-                SU[i].PossiblePacketsDropped.pop_front();
-                SU[i].PossiblePacketsDropped.push_back(1);
-            } else {
-                // If the oldest packet is fine, the rest are fine too (ordered by time)
-                break;
+                    // Track drop statistics (for your weighted param calculation)
+                    SU[i].PossiblePacketsDropped.pop_front();
+                    SU[i].PossiblePacketsDropped.push_back(1);
+                    // cout<< "PKT DROPPED!!!!!"<< endl;
+                } else {
+                    // If the oldest packet is fine, the rest are fine too (ordered by time)
+                    break;
+                }
             }
         }
-        // ***************************************************************
 
         // ***************************************************************
-        // 2. GENERATION LOGIC WITH "UDP" vs "TCP" BEHAVIOR
-        // ***************************************************************
-
+        // CHECK IF NEED TO GENERATE
         bool shouldGenerate = false;
 
         // Check Generation Rate first
-        if(SU[i].pktGenerationRate == -1){ // Bulky/Camera
+        if(SU[i].pktGenerationRate == -1){ //Camera
             if(SU[i].counterPeriod > 0){
                 SU[i].counterPeriod--;
             }else if(SU[i].counterPeriod== 0){
@@ -844,35 +841,13 @@ void generatePKTS(vector <SecondaryUser> &SU, int t){
             }
         }
         if(shouldGenerate){
-            // LOGIC A: CAMERA (UDP-like)
-            // Cameras NEVER stop generating. If queue is full, drop old frame, add new.
-            if(SU[i].urgency == 1 && SU[i].dataRateClass == 1) {
-                if(SU[i].pktqueue.size() >= MaxQueueSize){
-                    // Queue full? Drop the head to make room (Packet Loss due to congestion)
-                    SU[i].pktqueue.pop_front();
-                    SU[i].NumOfPacketsDropped++;
-
-                    SU[i].PossiblePacketsDropped.pop_front();
-                    SU[i].PossiblePacketsDropped.push_back(1);
-                }
-                // Generate and Push
                 SU[i].generatePkt(t);
                 SU[i].NumOfPacketsGenerated++;
-            }
-
-            // LOGIC B: BEST EFFORT / URGENT (TCP-like)
-            // If queue is near full, Backpressure triggers (stop generating).
-            else {
-                if(SU[i].pktqueue.size() <= MaxQueueSize * 1){
-                    SU[i].generatePkt(t);
-                    SU[i].NumOfPacketsGenerated++;
-                }
-                // Else: Do nothing (Flow Control pauses generation).
-                // No drop recorded here, just silence.
+            // }
             }
         }
     }
-}
+
 
 void collisionCounter(vector <SecondaryUser> &SU, int t){
     for(int i=0; i< SU.size(); i++){
@@ -1262,24 +1237,22 @@ int main(){
     //initialize system
     initializeSystem();
 
-
-    // vector<vector<unsigned int>> pktgenerationrate(numberOfTimeSlots, vector<unsigned int>(SU.size(), 0));
     int availableTimeSlots = 0;
     for(int t=0; t< numberOfTimeSlots; t++){ //TIMESLOTS LOOP
         cout<< "time slot: "<< t<< endl;
-        // cout<< "TxRate for SU 2 is:"<<SU[2].counterTxRate<<endl;
+
+        // CHOOSE PU ACTIVATION
+        //****************************************************
         // PUInitMarkov(PU);
         availableTimeSlots += PUInitDeterministic(PU,t,DutyCycleDeterministic);
-
         // cout<< "PU activation at time slot: ";
         // for(int i=0; i< PU.size(); i++){
         //     cout<< PU[i].PUState<< " ";
         // }
         // cout<< endl;
-        // cout<<endl;
-        // for (int i=0;i<PU.size();i++){
-        //     PU[i].PUState=1;
-        // }
+        //****************************************************
+
+
         availableTimeSlots +=numberOfBands;
         //**********************************************************
         //******************** Generate Packets ****************
@@ -1291,7 +1264,7 @@ int main(){
         // cout<<SU[3].AvgPacketWaitingTimeWeight;
         // cout<<endl;
 
-
+    candidateBandsWeights(SU);
         //**********************************************************
         //***************** Allocation Function ****************
         //**********************************************************
@@ -1323,39 +1296,7 @@ int main(){
         //************ Take Decision Stay or Relinquish **********
         //**********************************************************
         TakeDecisionStayOrRelinquish(SU,t);
-
-        if (t%10 ==0){
-            for(int i=0; i< SU.size(); i++){
-                SU[i].collisionCounterEvery5TimeSlots=0;
-                // cout<<SU[i].pktqueue.size()<<" ";
-            }
-        }
-
-        candidateBandsWeights(SU);
-
-
         DecisionMaker(SU,PU);
-
-        // for (int i=0;i<SU.size();i++)
-        // {
-        //     printVector(SU[i].BandsRankingSeenByEachSu,"Bands Rank seen by SU number "+to_string(i));
-        //     printVector(SU[i].weights,"weights of bands seen by SU "+to_string(i));
-
-        // }
-        // cout<<"selected band for su2: "<<SU[2].selectedBand<<endl;
-        // printVector(SU[2].collisionCounterHistoryPerSU, "SU2 ControlHistory: ");
-        // printDeQueue(SU[2].collisionCounterHistoryPerSU);
-
-        // SU[i].counter= SU[i].choosePktPeriod(SU[i].periodsForBulky, "decreaseQuality");
-        // cout<< "decreaseQualitier"<< endl;
-        // cout<< "SIZE: "<< SU[2].pktqueue.size()<< endl;
-        // if (t%10==0)
-        // {
-        //     for (int i=0;i<SU.size();i++)
-        //     {
-        //         cout<<"SU"<<i<<"TxRate: "<<SU[i].counterTxRate<<" ";
-        //     }
-        // }
 
 
         TotalPacketsCounter(t,SU,TotalPackets.AvgPerTimeSlot);
@@ -1363,10 +1304,7 @@ int main(){
         ThroughPutCalculator(t,TXFreqArray,Throughput.AvgPerTimeSlot,Throughput.AvgPerBand);
         UtilizationCalculator(t,TXFreqArray,Utilization.AvgPerTimeSlot,Utilization.AvgPerBand);
 
-        // for(int i=0; i< SU[0].SensedBandsSUPerspectiveHistory.size(); i++){
-        //     printVector(SU[0].SensedBandsSUPerspectiveHistory[i], "history: ");
-        // }
-        // printVector(SU[0].weights,"weightsVector: ");
+
     }
     cout<< "available time slots: "<< availableTimeSlots<< endl;
     // cout<<"All packets: "<< endl;
@@ -1532,28 +1470,4 @@ int main(){
 
     }
     File12.close();
-
-
-
-
-
-
-
-
-
-
-
 }
-
-
-// According to number of collisions and throughput calculation:
-// 1. for an urgent SU: it is a mean to choose a favorable band over another unfavorable one
-// 2. for a bulky uninterruptible SU, it is an indicator to lower its datarate or not
-// 3. for the best effort traffic, it means backoff exponentially
-
-
-// As we change the pkt Generation rate according to (collisions and throughput (that is: lowering the quality))
-// we also have to control the pkt transmission rate according to collisions and throughput
-// that is: send a pkt every 2 time slots or every 6 time slots?
-// this way => it allows for extra time slots to be vacant, and thus urgent SU's can try to transmit on these vacant time slots and might be able to transmit their traffic
-// or: another bulky SU, might be able to interleave its pkts with the ongoing transmission of another bulky device => maximum throughput with minimum collision
