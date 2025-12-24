@@ -14,10 +14,10 @@
 using namespace std;
 // parameters
 const int numberOfSU = 20;
-const double numberOfBands = 10;
+const double numberOfBands = 1;
 // vector <double> numofBands = {5,10,25};
 const int numberOfPU = numberOfBands;
-const double numberOfTimeSlots = 30000;
+const double numberOfTimeSlots = 100;
 const double durationOfTimeSlot = 0.01;
 const int numberOfBandsPerSU = 1;
 vector <double> PuActiveProb={0.2,0.4,0.5,0.6};
@@ -570,7 +570,6 @@ vector <unsigned int> allocationFunction(vector <Band> &PU, vector<SecondaryUser
                     // Select a random index from the top K candidates
                     int chosenIndex = std::uniform_int_distribution<int>(0, topK - 1)(randEngine);
                     SU[i].selectedBand = rankedCandidates[chosenIndex].second;
-
                     // cout<< "SU["<< i<< "]: selectedBand:"<< SU[i].selectedBand<< endl;
                     // cout << "SU[" << i << "] Intelligent Selection: Band " << SU[i].selectedBand
                     //      << " (Score: " << rankedCandidates[chosenIndex].first << ")" << endl;
@@ -656,26 +655,30 @@ vector <unsigned int> allocationFunction(vector <Band> &PU, vector<SecondaryUser
             //         TXFreqArray[SU[i].selectedBand]+=1;
             //     }
             // }
-            if(SU[i].shift > 0){
-                SU[i].shift--;
-                if(SU[i].shift == 0){
-                    SU[i].counterTxRate = 0;
-                }
-            }
-            // 2. Handle Periodic Transmission (Only if shift is done)
-            else if(SU[i].shift == 0){
+            if(SU[i].selectedBand !=-1){
 
-                // If the counter is still running, decrement it
-                if(SU[i].counterTxRate > 0){
-                    SU[i].counterTxRate--;
-                }
 
-                // CHANGE: Check for 0 separately.
-                // This covers two cases:
-                // A) We just decremented from 1 to 0 (Periodic transmission).
-                // B) We forced it to 0 in the 'shift' block above (First transmission after shift).
-                if(SU[i].counterTxRate == 0){
-                    TXFreqArray[SU[i].selectedBand] += 1;
+                if(SU[i].shift > 0){
+                    SU[i].shift--;
+                    if(SU[i].shift == 0){
+                        SU[i].counterTxRate = 0;
+                    }
+                }
+                // 2. Handle Periodic Transmission (Only if shift is done)
+                else if(SU[i].shift == 0){
+
+                    // If the counter is still running, decrement it
+                    if(SU[i].counterTxRate > 0){
+                        SU[i].counterTxRate--;
+                    }
+
+                    // CHANGE: Check for 0 separately.
+                    // This covers two cases:
+                    // A) We just decremented from 1 to 0 (Periodic transmission).
+                    // B) We forced it to 0 in the 'shift' block above (First transmission after shift).
+                    if(SU[i].counterTxRate == 0){
+                        TXFreqArray[SU[i].selectedBand] += 1;
+                    }
                 }
             }
             //********************************************************************************
@@ -740,7 +743,7 @@ vector <unsigned int> allocationFunction(vector <Band> &PU, vector<SecondaryUser
                     //     SU[i].BandsExperienceHistory[SU[i].selectedBand]=SU[i].BandsExperienceHistory[SU[i].selectedBand]+BandTrustFactor;
                     // }
                     updateBandScore(SU[i], SU[i].selectedBand, true);  // true = success (100 reward)
-
+                    cout<<"Packet SENT!"<< endl;
                     Packet poppedPacket = SU[i].pktqueue.front();
                     SU[i].pktqueue.pop_front();
                     SU[i].NumOfPacketsSent++;
@@ -860,7 +863,7 @@ void generatePKTS(vector <SecondaryUser> &SU, int t){
             // LOGIC B: BEST EFFORT / URGENT (TCP-like)
             // If queue is near full, Backpressure triggers (stop generating).
             else {
-                if(SU[i].pktqueue.size() < MaxQueueSize * 0.8){
+                if(SU[i].pktqueue.size() <= MaxQueueSize * 1){
                     SU[i].generatePkt(t);
                     SU[i].NumOfPacketsGenerated++;
                 }
@@ -1258,13 +1261,15 @@ int main(){
     StartingPositions=AssignStartingPositions(numberOfBands,1,numberOfBands);
     //initialize system
     initializeSystem();
+
+
     // vector<vector<unsigned int>> pktgenerationrate(numberOfTimeSlots, vector<unsigned int>(SU.size(), 0));
     int availableTimeSlots = 0;
     for(int t=0; t< numberOfTimeSlots; t++){ //TIMESLOTS LOOP
         cout<< "time slot: "<< t<< endl;
         // cout<< "TxRate for SU 2 is:"<<SU[2].counterTxRate<<endl;
         // PUInitMarkov(PU);
-        // availableTimeSlots += PUInitDeterministic(PU,t,DutyCycleDeterministic);
+        availableTimeSlots += PUInitDeterministic(PU,t,DutyCycleDeterministic);
 
         // cout<< "PU activation at time slot: ";
         // for(int i=0; i< PU.size(); i++){
@@ -1272,14 +1277,15 @@ int main(){
         // }
         // cout<< endl;
         // cout<<endl;
-        for (int i=0;i<PU.size();i++){
-            PU[i].PUState=0;
-        }
+        // for (int i=0;i<PU.size();i++){
+        //     PU[i].PUState=1;
+        // }
         availableTimeSlots +=numberOfBands;
         //**********************************************************
         //******************** Generate Packets ****************
         //**********************************************************
         generatePKTS(SU, t);
+
         CalculateSuSpecificParameters (SU,t,RelinquishingTendencyUrgent.AvgPerTimeSlot,RelinquishingTendencyCamera.AvgPerTimeSlot,RelinquishingTendencyBestEffort.AvgPerTimeSlot);
         // cout<<"SU[3].AvgPacketWaitingTimeWeight :";
         // cout<<SU[3].AvgPacketWaitingTimeWeight;
@@ -1301,7 +1307,7 @@ int main(){
         //     }
         //     cout<<endl;
         // }
-
+        printVector(TXFreqArray, "TXFreqArray: ");
 
         //**********************************************************
         //*************** Calculate CollisionCounter ***********
@@ -1318,7 +1324,6 @@ int main(){
         //**********************************************************
         TakeDecisionStayOrRelinquish(SU,t);
 
-
         if (t%10 ==0){
             for(int i=0; i< SU.size(); i++){
                 SU[i].collisionCounterEvery5TimeSlots=0;
@@ -1327,7 +1332,10 @@ int main(){
         }
 
         candidateBandsWeights(SU);
+
+
         DecisionMaker(SU,PU);
+
         // for (int i=0;i<SU.size();i++)
         // {
         //     printVector(SU[i].BandsRankingSeenByEachSu,"Bands Rank seen by SU number "+to_string(i));
@@ -1354,8 +1362,6 @@ int main(){
         CollisionCounter(t,Collisions.AvgPerTimeSlot,TXFreqArray);
         ThroughPutCalculator(t,TXFreqArray,Throughput.AvgPerTimeSlot,Throughput.AvgPerBand);
         UtilizationCalculator(t,TXFreqArray,Utilization.AvgPerTimeSlot,Utilization.AvgPerBand);
-
-
 
         // for(int i=0; i< SU[0].SensedBandsSUPerspectiveHistory.size(); i++){
         //     printVector(SU[0].SensedBandsSUPerspectiveHistory[i], "history: ");
@@ -1384,8 +1390,11 @@ int main(){
     // printQueue(SU[2].sentPackets);
 
     WaitingTimeCalculator(SU,WaitingTime.AvgPacketWaitingTime);
+
     NumberOfPacketsDroppedCalculator(SU,NumberofPacketsDropped.AvgPerSU);
+
     FairnessCalculator(SU,Fairness.AvgPerSU);
+
 
 
 
@@ -1399,12 +1408,14 @@ int main(){
     // printVector(Throughput.AvgPerBand,"Band Average");
     // printDeQueue(PU[0].PuBehaviorHistory);
     double totalNumberOfPktsGenerated = 0;
+    double totalNumberOfPktsSent= 0;
     double avgThroughputPerSU = 0;
     for (int i=0;i<SU.size();i++)
     {
         cout<<"SU"<<i<<" PacketsGenerated:"<<SU[i].NumOfPacketsGenerated<<" ";
         totalNumberOfPktsGenerated +=SU[i].NumOfPacketsGenerated;
         cout<<" PacketsSent:"<<SU[i].NumOfPacketsSent;
+        totalNumberOfPktsSent += SU[i].NumOfPacketsSent;
         avgThroughputPerSU += SU[i].NumOfPacketsSent / SU[i].NumOfPacketsGenerated;
         cout<<" PacketsDropped:"<<SU[i].NumOfPacketsDropped;
         cout<<" Que Size: "<<SU[i].pktqueue.size();
@@ -1415,6 +1426,7 @@ int main(){
     // printVector(NumberofPacketsDropped.AvgPerSU,"Packets Dropped for each su");
 
     cout<< "totalNumberOfPktsGenerated: "<< totalNumberOfPktsGenerated<< endl;
+    cout<< "totalNumberOfPktsSent: "<< totalNumberOfPktsSent<< endl;
     cout<< "Load is: "<< totalNumberOfPktsGenerated / availableTimeSlots<< endl;
 
     cout<< "avgThroughputPerSU: "<< avgThroughputPerSU/ numberOfSU << endl;
