@@ -14,7 +14,7 @@
 using namespace std;
 // parameters
 const int numberOfSU = 20;
-const double numberOfBands = 10;
+const double numberOfBands = 20;
 // vector <double> numofBands = {5,10,25};
 const int numberOfPU = numberOfBands;
 const double numberOfTimeSlots = 10000;
@@ -564,7 +564,7 @@ vector <unsigned int> allocationFunction(vector <Band> &PU, vector<SecondaryUser
                     // 2. AVOID HERDING (Top-K Selection)
                     // Instead of always taking the #1 band (which makes everyone crowd it),
                     // choose randomly from the top 3 candidates (or fewer if size < 3).
-                    int topK = min((int)rankedCandidates.size(), 3);
+                    int topK = min((int)rankedCandidates.size(), 4);
 
                     // Select a random index from the top K candidates
                     int chosenIndex = std::uniform_int_distribution<int>(0, topK - 1)(randEngine);
@@ -1253,7 +1253,7 @@ int main(){
         //****************************************************
 
 
-        availableTimeSlots +=numberOfBands;
+        // availableTimeSlots +=numberOfBands;
         //**********************************************************
         //******************** Generate Packets ****************
         //**********************************************************
@@ -1295,8 +1295,9 @@ int main(){
         //**********************************************************
         //************ Take Decision Stay or Relinquish **********
         //**********************************************************
-        TakeDecisionStayOrRelinquish(SU,t);
         DecisionMaker(SU,PU);
+        TakeDecisionStayOrRelinquish(SU,t);
+
 
 
         TotalPacketsCounter(t,SU,TotalPackets.AvgPerTimeSlot);
@@ -1372,7 +1373,7 @@ int main(){
 
 
     // *********************************Writing Into Files*******************************************//
-    string filename="txtfiles/Collisions.txt";
+    string filename="/txtfiles/Collisions.txt";
     ofstream File1 (filename);
     for (int i=0;i<Collisions.AvgPerTimeSlot.size();i++)
     {
