@@ -14,11 +14,12 @@
 using namespace std;
 // parameters
 const int numberOfSU = 20;
-const double numberOfBands = 10;
+const double numberOfBands = 20;
 // vector <double> numofBands = {5,10,25};
 const int numberOfPU = numberOfBands;
-const double numberOfTimeSlots = 10000;
+const double numberOfTimeSlots = 1000;
 const double durationOfTimeSlot = 0.01;
+int ChooseTopKRandomly=3;
 const int numberOfBandsPerSU = 1;
 vector <double> PuActiveProb={0.2,0.4,0.5,0.6};
 double probOffToOn = 0.01;//never change this
@@ -68,6 +69,7 @@ public:
 class SecondaryUser{
 public:
 
+    bool AllowedToTransmit=false;
     // This is a deque of the vector called "bandsAsSeenBySU", which shows how SU sees all bands including his band.
     deque<vector<unsigned int>> SensedBandsSUPerspectiveHistory;
     //MURAD
@@ -510,288 +512,491 @@ int counter4 = 0;
 //*************** Allocation Function ******************
 //**********************************************************
 
-// INTELLIGENCE (IT SHOULD BE DOING ACQUIRING A NEW BAND)
-vector <unsigned int> allocationFunction(vector <Band> &PU, vector<SecondaryUser>&SU, int t){
-    vector <unsigned int> possibleBands;
-    vector <unsigned int> occupiedBands(PU.size(), 0);
+// // INTELLIGENCE (IT SHOULD BE DOING ACQUIRING A NEW BAND)
+// vector <unsigned int> allocationFunction(vector <Band> &PU, vector<SecondaryUser>&SU, int t){
+//     vector <unsigned int> possibleBands;
+//     vector <unsigned int> occupiedBands(PU.size(), 0);
 
-    vector <unsigned int> TXFreqArray(PU.size(), 0);
+//     vector <unsigned int> TXFreqArray(PU.size(), 0);
 
-    for(int i=0; i< PU.size(); i++){
-        if(PU[i].PUState ==0){
-            possibleBands.push_back(i);
-        }
+//     for(int i=0; i< PU.size(); i++){
+//         if(PU[i].PUState ==0){
+//             possibleBands.push_back(i);
+//         }
+//     }
+
+//     for(int i=0; i<SU.size(); i++){
+//         if(SU[i].pktqueue.size() ==0){
+//             continue;
+//         }else{
+//             if(possibleBands.size() >0){
+//                 // SU[i].selectedBand will not be random, it must be based upon the history parameters
+//                 // SU[i] will not get assigned a band every time slot, however, it will choose to stay or relinquish
+//                 if(SU[i].selectedBand==-1){ // this if statement is satisfied, when SU wasn't assigned a band yet, or when SU relinquished a band it chose before
+//                     //INTELLIGENCE
+//                     // SU[i].selectedBand =selectRandomValues(possibleBands,1)[0]; // to be changed with history
+//                     // if(SU[i].urgency !=0){ //NOT URGENT
+//                     // retreive utilization value
+//                     // maximum TXrate possible = 1/utilization
+//                     // randomNumber = assign TXperiod that is greater than or equal to maximum TXrate possible randomly
+//                     // SU[i].shift = selectRandomValue(randomNumber)
+
+//                     // }
+
+//                     // **********************************************************
+//                     // *************** INTELLIGENT BAND SELECTION ***************
+//                     // **********************************************************
+//                     // 1. RANK CANDIDATES BY EXPERIENCE
+//                     // Create a temporary vector to hold pairs of <Score, BandIndex>
+//                     vector<pair<double, int>> rankedCandidates;
+
+//                     for(int bandIdx : possibleBands) {
+//                         // Use Experience History.
+//                         // Unvisited bands usually start at 50, Bad bands < 50, Good bands > 50.
+//                         double score = SU[i].BandsExperienceHistory[bandIdx];
+//                         rankedCandidates.push_back({score, bandIdx});
+//                     }
+
+//                     // Sort descending: Highest score (best experience) first
+//                     sort(rankedCandidates.begin(), rankedCandidates.end(),
+//                          [](const pair<double, int>& a, const pair<double, int>& b) {
+//                              return a.first > b.first;
+//                          });
+
+//                     // 2. AVOID HERDING (Top-K Selection)
+//                     // Instead of always taking the #1 band (which makes everyone crowd it),
+//                     // choose randomly from the top 3 candidates (or fewer if size < 3).
+//                     int topK = min((int)rankedCandidates.size(), 3);
+
+//                     // Select a random index from the top K candidates
+//                     int chosenIndex = std::uniform_int_distribution<int>(0, topK - 1)(randEngine);
+//                     SU[i].selectedBand = rankedCandidates[chosenIndex].second;
+//                     // cout<< "SU["<< i<< "]: selectedBand:"<< SU[i].selectedBand<< endl;
+//                     // cout << "SU[" << i << "] Intelligent Selection: Band " << SU[i].selectedBand
+//                     //      << " (Score: " << rankedCandidates[chosenIndex].first << ")" << endl;
+//                     occupiedBands[SU[i].selectedBand]+=1;
+
+
+//                     // **********************************************************
+//                     // ************ UTILIZATION-AWARE RATE CONTROL **************
+//                     // **********************************************************
+
+//                     // 3. CHECK UTILIZATION (AVAILABILITY)
+//                     // weights[k] stores the probability of the band being Idle (Availability).
+//                     // 1.0 = Fully Free, 0.0 = Fully Busy.
+//                     double availability = SU[i].weights[SU[i].selectedBand];
+
+//                     // Safety: If sensing history is empty (start of sim) or band is dead, assume low availability
+//                     if(availability <= 0.05) availability = 0.05;
+
+//                     // 4. CALCULATE MINIMUM WAIT TIME
+//                     // Minimum Period = 1 / Availability.
+//                     // Example: 50% utilization (0.5 avail) -> Period 2.
+//                     // TxRates values represent "Wait Time" (Period - 1).
+//                     double minPeriod = 1.0 / availability; //
+//                     double minWaitTime = minPeriod - 1.0;
+
+//                     if(minWaitTime < 0) minWaitTime = 0; // Sanity check
+
+//                     // 5. FILTER VALID TX RATES
+//                     // Find all indices in TxRates that satisfy: TxRate >= minWaitTime
+//                     vector<int> validTxIndices;
+//                     for(int r = 0; r < SU[i].TxRates.size(); r++) {
+//                         if(SU[i].TxRates[r] >= minWaitTime) {
+//                             validTxIndices.push_back(r);
+//                         }
+//                     }
+
+//                     // Fallback: If band is heavily congested (requires extremely slow rate not in vector),
+//                     // pick the slowest rate available.
+//                     if(validTxIndices.empty() || availability ==0) {
+//                         validTxIndices.push_back(SU[i].TxRates.size() - 1);
+//                     }
+//                     // 6. ASSIGN RATE AND SHIFT
+//                     // Randomly select one of the allowed rates
+//                     int randomRateIdx = std::uniform_int_distribution<int>(0, validTxIndices.size() - 1)(randEngine);
+
+//                     // Update the SU's current transmission index
+//                     SU[i].currentTxIndex = validTxIndices[randomRateIdx];
+//                     // Calculate the actual wait time chosen
+//                     int chosenWaitTime = SU[i].TxRates[SU[i].currentTxIndex];
+
+//                     // Assign random shift to desynchronize
+//                     if(chosenWaitTime > 0){
+//                         SU[i].shift = std::uniform_int_distribution<int>(0, chosenWaitTime)(randEngine);
+//                     } else {
+//                         SU[i].shift = 0;
+//                     }
+
+//                     // Reset the Tx Counter immediately based on new decision
+//                     SU[i].counterTxRate = SU[i].getTxCounterVal();
+
+//                     // cout << "   -> Rate Adaptation: Avail=" << availability
+//                     //      << ", MinWait=" << minWaitTime
+//                     //      << ", ChosenWait=" << chosenWaitTime
+//                     //      << ", Shift=" << SU[i].shift << endl;
+
+//                 }
+//             }
+//             //********************************************************************************
+//             //********************************************************************************
+//             // if(SU[i].shift >0){
+//             //     SU[i].shift--;
+//             // }else if(SU[i].shift==0){
+//             //     //SU[i].counterTXRate = 0;
+//             //     if(SU[i].counterTxRate > 0){
+//             //         // cout<<"SU["<<to_string(i)<< "] has: "<< to_string(SU[i].counterTxRate)<< " time slots left"<< endl;
+//             //         SU[i].counterTxRate--;
+//             //         if(SU[i].counterTxRate== 0){
+//             //             TXFreqArray[SU[i].selectedBand]+=1;
+//             //         }
+//             //     }else if(SU[i].counterTxRate== 0){
+//             //         // cout<<"SU["<<to_string(i)<< "] Reached 0 counter: "<< SU[i].selectedBand<< endl;
+//             //         //SEND PACKET
+//             //         TXFreqArray[SU[i].selectedBand]+=1;
+//             //     }
+//             // }
+//             if(SU[i].selectedBand !=-1){
+
+
+//                 if(SU[i].shift > 0){
+//                     SU[i].shift--;
+//                     if(SU[i].shift == 0){
+//                         SU[i].counterTxRate = 0;
+//                          TXFreqArray[SU[i].selectedBand] += 1;
+//                     }
+//                 }
+//                 // 2. Handle Periodic Transmission (Only if shift is done)
+//                 else if(SU[i].shift == 0){
+//                     // If the counter is still running, decrement it
+//                     if(SU[i].counterTxRate > 0){
+//                         SU[i].counterTxRate--;
+//                     }
+
+//                     // CHANGE: Check for 0 separately.
+//                     // This covers two cases:
+//                     // A) We just decremented from 1 to 0 (Periodic transmission).
+//                     // B) We forced it to 0 in the 'shift' block above (First transmission after shift).
+//                     if(SU[i].counterTxRate == 0){
+//                         TXFreqArray[SU[i].selectedBand] += 1;
+//                     }
+//                 }
+//             }
+//             //********************************************************************************
+//             //********************************************************************************
+//         }
+
+//         // if(SU[i].counterTxRate > 0){
+//         //     SU[i].counterTxRate--;
+//         // }else if(SU[i].counterTxRate== 0){
+//         //     //choose band only if txRateCounter reached 0;
+//         //     if(SU[i].pktqueue.size() ==0){
+//         //         continue;
+//         //     }else{
+//         //         if(possibleBands.size() >0){
+//         //             SU[i].selectedBand =selectRandomValues(possibleBands,1)[0];
+//         //             TXFreqArray[SU[i].selectedBand]+=1;
+
+//         //         }
+
+//         //     }
+//         // }
+//     }
+
+
+
+//     for(int i=0; i< SU.size(); i++){
+//         SU[i].fillbandsAsSeenBySU(TXFreqArray, t);
+//         // string s = "BandsAsSeenBySU[" + to_string(i) + "]: ";
+//         // printVector(SU[i].bandsAsSeenBySU,s);
+//         if(SU[i].selectedBand !=-1){ //was given band
+//             if(TXFreqArray[SU[i].selectedBand] > 1){ // >1, and NOT (TXFreqArray[SU[i].selectedBand] !=1) because when SU acquired a band (alone) and doesn't have packets to transmit, TXFreqArray is equal to zero, and it counts a collision
+//                 // mark collision of SU on that band
+//                 // SU[i].history[TXFreqArray[SU[i].selectedBand]][]++;
+//                 SU[i].collisionCounterHistoryPerSU.pop_front();
+//                 SU[i].collisionCounterHistoryPerSU.push_back(1);
+//                 SU[i].counterTxRate= SU[i].getTxCounterVal();
+//                 // if (SU[i].BandsExperienceHistory[SU[i].selectedBand]>=BandTrustFactor) // bigger than 10 to ensure it does not become negative, 0 means the band is really bad
+//                 // {
+//                 //     SU[i].BandsExperienceHistory[SU[i].selectedBand]=SU[i].BandsExperienceHistory[SU[i].selectedBand]-BandTrustFactor;
+//                 // }
+//                 updateBandScore(SU[i], SU[i].selectedBand, false); // false = collision (0 reward)
+//                 // 1. Force a random delay (Backoff) to desynchronize
+//                 // Randomly wait between 2 to 10 slots before trying again
+//                 int backoff = std::uniform_int_distribution<int>(2, 5)(randEngine);
+//                 SU[i].shift += backoff;
+
+//             }else{
+//                 if(SU[i].pktqueue.size()> 0 && SU[i].counterTxRate== 0){
+//                     if(i==3){
+//                         test[counter] = 1;
+//                     }
+//                     if(i==4){
+//                         test2[counter2] = 1;
+//                     }
+//                     if(i==12){
+//                         test3[counter3] = 1;
+//                     }
+//                     if(i==7){
+//                         test4[counter4] =1;
+//                     }
+
+//                     // if (SU[i].BandsExperienceHistory[SU[i].selectedBand]<=100-BandTrustFactor) // less than 90 to ensure it does not overshoot to higher than 1, 1 means the band is very good
+//                     // {
+//                     //     SU[i].BandsExperienceHistory[SU[i].selectedBand]=SU[i].BandsExperienceHistory[SU[i].selectedBand]+BandTrustFactor;
+//                     // }
+//                     updateBandScore(SU[i], SU[i].selectedBand, true);  // true = success (100 reward)
+//                     cout<<"Packet SENT!"<< endl;
+//                     Packet poppedPacket = SU[i].pktqueue.front();
+//                     SU[i].pktqueue.pop_front();
+//                     SU[i].NumOfPacketsSent++;
+//                     poppedPacket.pktArrivalTime = t;
+//                     poppedPacket.pktWaitingTimeInQueue = poppedPacket.pktArrivalTime - poppedPacket.pktGenerationTime;
+//                     SU[i].sentPackets.push_back(poppedPacket);
+//                     // cout<< "PKT SENT ON BAND: "<< SU[i].selectedBand<< ", BY SU: "<< to_string(i)<< endl;
+//                     // printOnePacket(poppedPacket);
+//                     SU[i].collisionCounterHistoryPerSU.pop_front();
+//                     SU[i].collisionCounterHistoryPerSU.push_back(0); //No collision
+//                     // RESET THE COUNTER
+//                     SU[i].counterTxRate= SU[i].getTxCounterVal();
+//                 }else{
+//                     // Case: selected band, low TXFreqArray count (not a collision), but no packet to send (or counter > 0)
+//                     SU[i].collisionCounterHistoryPerSU.pop_front();
+//                     SU[i].collisionCounterHistoryPerSU.push_back(0);
+//                 }
+//             }
+//         }else{
+//             SU[i].collisionCounterHistoryPerSU.pop_front();
+//             SU[i].collisionCounterHistoryPerSU.push_back(0);
+
+//         }
+
+//         // if(i ==3){
+//         //     cout<< "SU[3].queueSIZE: "<< SU[i].pktqueue.size()<< endl;
+//         // }
+//     }
+
+//     counter++;
+//     counter2++;
+//     counter3++;
+//     counter4++;
+//     // cout<< "SU3 PKT QUEUE SIZE: "<< SU[3].pktqueue.size()<< endl;
+//     // printVector(test, "THIS IS HOW SU 3 SENDS PACKETS");
+
+//     // cout<< "SU4 PKT QUEUE SIZE: "<< SU[4].pktqueue.size()<< endl;
+//     // printVector(test2, "THIS IS HOW SU 4 SENDS PACKETS");
+//     // cout<< "SU12 PKT QUEUE SIZE: "<< SU[12].pktqueue.size()<< endl;
+//     // printVector(test3, "THIS IS HOW SU 12 SENDS PACKETS");
+
+//     // cout<< "SU7 PKT QUEUE SIZE: "<< SU[7].pktqueue.size()<< endl;
+//     // printVector(test4, "THIS IS HOW SU 7 SENDS PACKETS");
+//     // printVector(TXFreqArray,"TX frequency array");
+
+//     return TXFreqArray;
+//  }
+// // //*******************************************************
+// //*******************************************************
+int RankBandsAndChoooseTopK (vector<SecondaryUser>&SU,vector <unsigned int> &possibleBands,int SUIndex)
+{
+    vector <pair<double, int>> Ranks(possibleBands.size(), {0.0, 0});
+    for (int i=0;i<possibleBands.size();i++)
+    {
+        Ranks[i].first=(SU[SUIndex].BandsExperienceHistory[possibleBands[i]]+PU[possibleBands[i]].Weight+SU[SUIndex].weights[possibleBands[i]])/3;
+        Ranks[i].second=possibleBands[i];
     }
 
-    for(int i=0; i<SU.size(); i++){
-        if(SU[i].pktqueue.size() ==0){
+
+    sort(Ranks.begin(), Ranks.end(),
+         [](const pair<double, int>& a, const pair<double, int>& b) {
+             return a.first > b.first;
+         });
+
+
+    int topK = min((int)Ranks.size(), ChooseTopKRandomly);
+
+    int chosenIndex = std::uniform_int_distribution<int>(0, topK-1)(randEngine);
+    return Ranks[chosenIndex].second;
+
+
+}
+void chooseTxRateAfterAcquiring (int SuIndex)
+{
+    double availability = SU[SuIndex].weights[SU[SuIndex].selectedBand];
+
+    if(availability <= 0.05)
+        availability = 0.05;
+
+    double minPeriod = 1.0 / availability; //
+    double minWaitTime = minPeriod - 1.0;
+
+    if(minWaitTime < 0) minWaitTime = 0; // Sanity check
+
+    // 5. FILTER VALID TX RATES
+    // Find all indices in TxRates that satisfy: TxRate >= minWaitTime
+    vector<int> validTxIndices;
+    for(int r = 0; r < SU[SuIndex].TxRates.size(); r++) {
+        if(SU[SuIndex].TxRates[r] >= minWaitTime) {
+            validTxIndices.push_back(r);
+        }
+    }
+    if(validTxIndices.empty() || availability ==0) {
+        validTxIndices.push_back(SU[SuIndex].TxRates.size() - 1);
+    }
+    int randomRateIdx = std::uniform_int_distribution<int>(0, validTxIndices.size() - 1)(randEngine);
+    SU[SuIndex].currentTxIndex = validTxIndices[randomRateIdx];
+    // Calculate the actual wait time chosen
+    int chosenWaitTime = SU[SuIndex].TxRates[SU[SuIndex].currentTxIndex];
+
+    // Assign random shift to desynchronize
+    if(chosenWaitTime > 0){
+        SU[SuIndex].shift = std::uniform_int_distribution<int>(0, chosenWaitTime)(randEngine);
+    } else {
+        SU[SuIndex].shift = 0;
+    }
+
+    // Reset the Tx Counter immediately based on new decision
+    SU[SuIndex].counterTxRate = SU[SuIndex].getTxCounterVal();
+
+
+}
+void AssignBands (vector<SecondaryUser>&SU,vector <unsigned int> &possibleBands)
+{
+    for (int i=0;i<SU.size();i++)
+    {
+        if (SU[i].pktqueue.size() ==0)
+        {
             continue;
-        }else{
-            if(possibleBands.size() >0){
-                // SU[i].selectedBand will not be random, it must be based upon the history parameters
-                // SU[i] will not get assigned a band every time slot, however, it will choose to stay or relinquish
-                if(SU[i].selectedBand==-1){ // this if statement is satisfied, when SU wasn't assigned a band yet, or when SU relinquished a band it chose before
-                    //INTELLIGENCE
-                    // SU[i].selectedBand =selectRandomValues(possibleBands,1)[0]; // to be changed with history
-                    // if(SU[i].urgency !=0){ //NOT URGENT
-                    // retreive utilization value
-                    // maximum TXrate possible = 1/utilization
-                    // randomNumber = assign TXperiod that is greater than or equal to maximum TXrate possible randomly
-                    // SU[i].shift = selectRandomValue(randomNumber)
-
-                    // }
-
-                    // **********************************************************
-                    // *************** INTELLIGENT BAND SELECTION ***************
-                    // **********************************************************
-                    // 1. RANK CANDIDATES BY EXPERIENCE
-                    // Create a temporary vector to hold pairs of <Score, BandIndex>
-                    vector<pair<double, int>> rankedCandidates;
-
-                    for(int bandIdx : possibleBands) {
-                        // Use Experience History.
-                        // Unvisited bands usually start at 50, Bad bands < 50, Good bands > 50.
-                        double score = SU[i].BandsExperienceHistory[bandIdx];
-                        rankedCandidates.push_back({score, bandIdx});
-                    }
-
-                    // Sort descending: Highest score (best experience) first
-                    sort(rankedCandidates.begin(), rankedCandidates.end(),
-                         [](const pair<double, int>& a, const pair<double, int>& b) {
-                             return a.first > b.first;
-                         });
-
-                    // 2. AVOID HERDING (Top-K Selection)
-                    // Instead of always taking the #1 band (which makes everyone crowd it),
-                    // choose randomly from the top 3 candidates (or fewer if size < 3).
-                    int topK = min((int)rankedCandidates.size(), 3);
-
-                    // Select a random index from the top K candidates
-                    int chosenIndex = std::uniform_int_distribution<int>(0, topK - 1)(randEngine);
-                    SU[i].selectedBand = rankedCandidates[chosenIndex].second;
-                    // cout<< "SU["<< i<< "]: selectedBand:"<< SU[i].selectedBand<< endl;
-                    // cout << "SU[" << i << "] Intelligent Selection: Band " << SU[i].selectedBand
-                    //      << " (Score: " << rankedCandidates[chosenIndex].first << ")" << endl;
-                    occupiedBands[SU[i].selectedBand]+=1;
-
-
-                    // **********************************************************
-                    // ************ UTILIZATION-AWARE RATE CONTROL **************
-                    // **********************************************************
-
-                    // 3. CHECK UTILIZATION (AVAILABILITY)
-                    // weights[k] stores the probability of the band being Idle (Availability).
-                    // 1.0 = Fully Free, 0.0 = Fully Busy.
-                    double availability = SU[i].weights[SU[i].selectedBand];
-
-                    // Safety: If sensing history is empty (start of sim) or band is dead, assume low availability
-                    if(availability <= 0.05) availability = 0.05;
-
-                    // 4. CALCULATE MINIMUM WAIT TIME
-                    // Minimum Period = 1 / Availability.
-                    // Example: 50% utilization (0.5 avail) -> Period 2.
-                    // TxRates values represent "Wait Time" (Period - 1).
-                    double minPeriod = 1.0 / availability; //
-                    double minWaitTime = minPeriod - 1.0;
-
-                    if(minWaitTime < 0) minWaitTime = 0; // Sanity check
-
-                    // 5. FILTER VALID TX RATES
-                    // Find all indices in TxRates that satisfy: TxRate >= minWaitTime
-                    vector<int> validTxIndices;
-                    for(int r = 0; r < SU[i].TxRates.size(); r++) {
-                        if(SU[i].TxRates[r] >= minWaitTime) {
-                            validTxIndices.push_back(r);
-                        }
-                    }
-
-                    // Fallback: If band is heavily congested (requires extremely slow rate not in vector),
-                    // pick the slowest rate available.
-                    if(validTxIndices.empty() || availability ==0) {
-                        validTxIndices.push_back(SU[i].TxRates.size() - 1);
-                    }
-                    // 6. ASSIGN RATE AND SHIFT
-                    // Randomly select one of the allowed rates
-                    int randomRateIdx = std::uniform_int_distribution<int>(0, validTxIndices.size() - 1)(randEngine);
-
-                    // Update the SU's current transmission index
-                    SU[i].currentTxIndex = validTxIndices[randomRateIdx];
-                    // Calculate the actual wait time chosen
-                    int chosenWaitTime = SU[i].TxRates[SU[i].currentTxIndex];
-
-                    // Assign random shift to desynchronize
-                    if(chosenWaitTime > 0){
-                        SU[i].shift = std::uniform_int_distribution<int>(0, chosenWaitTime)(randEngine);
-                    } else {
-                        SU[i].shift = 0;
-                    }
-
-                    // Reset the Tx Counter immediately based on new decision
-                    SU[i].counterTxRate = SU[i].getTxCounterVal();
-
-                    // cout << "   -> Rate Adaptation: Avail=" << availability
-                    //      << ", MinWait=" << minWaitTime
-                    //      << ", ChosenWait=" << chosenWaitTime
-                    //      << ", Shift=" << SU[i].shift << endl;
-
-                }
-            }
-            //********************************************************************************
-            //********************************************************************************
-            // if(SU[i].shift >0){
-            //     SU[i].shift--;
-            // }else if(SU[i].shift==0){
-            //     //SU[i].counterTXRate = 0;
-            //     if(SU[i].counterTxRate > 0){
-            //         // cout<<"SU["<<to_string(i)<< "] has: "<< to_string(SU[i].counterTxRate)<< " time slots left"<< endl;
-            //         SU[i].counterTxRate--;
-            //         if(SU[i].counterTxRate== 0){
-            //             TXFreqArray[SU[i].selectedBand]+=1;
-            //         }
-            //     }else if(SU[i].counterTxRate== 0){
-            //         // cout<<"SU["<<to_string(i)<< "] Reached 0 counter: "<< SU[i].selectedBand<< endl;
-            //         //SEND PACKET
-            //         TXFreqArray[SU[i].selectedBand]+=1;
-            //     }
-            // }
-            if(SU[i].selectedBand !=-1){
-
-
-                if(SU[i].shift > 0){
-                    SU[i].shift--;
-                    if(SU[i].shift == 0){
-                        SU[i].counterTxRate = 0;
-                         TXFreqArray[SU[i].selectedBand] += 1;
-                    }
-                }
-                // 2. Handle Periodic Transmission (Only if shift is done)
-                else if(SU[i].shift == 0){
-                    // If the counter is still running, decrement it
-                    if(SU[i].counterTxRate > 0){
-                        SU[i].counterTxRate--;
-                    }
-
-                    // CHANGE: Check for 0 separately.
-                    // This covers two cases:
-                    // A) We just decremented from 1 to 0 (Periodic transmission).
-                    // B) We forced it to 0 in the 'shift' block above (First transmission after shift).
-                    if(SU[i].counterTxRate == 0){
-                        TXFreqArray[SU[i].selectedBand] += 1;
-                    }
-                }
-            }
-            //********************************************************************************
-            //********************************************************************************
         }
+        else
+        {
+            if(possibleBands.size() >0)
+            {
+                if(SU[i].selectedBand==-1)
+                {
+                    SU[i].selectedBand=RankBandsAndChoooseTopK (SU,possibleBands,i);
+                    chooseTxRateAfterAcquiring(i);
 
-        // if(SU[i].counterTxRate > 0){
-        //     SU[i].counterTxRate--;
-        // }else if(SU[i].counterTxRate== 0){
-        //     //choose band only if txRateCounter reached 0;
-        //     if(SU[i].pktqueue.size() ==0){
-        //         continue;
-        //     }else{
-        //         if(possibleBands.size() >0){
-        //             SU[i].selectedBand =selectRandomValues(possibleBands,1)[0];
-        //             TXFreqArray[SU[i].selectedBand]+=1;
+                }
 
-        //         }
-
-        //     }
-        // }
+            }
+        }
     }
+}
+void CheckTxPeriod  (vector<SecondaryUser>&SU,vector <unsigned int> &TXFreqArray)
+{
+    for (int i=0;i<SU.size();i++)
+    {
+        if (SU[i].selectedBand==-1)
+            continue;
+        else
+        {
 
+            if(SU[i].shift > 0){
+                SU[i].shift--;
+                if(SU[i].shift == 0){
+                    SU[i].counterTxRate = 0;
+                    TXFreqArray[SU[i].selectedBand] += 1;
+                    SU[i].AllowedToTransmit=true;
 
+                }
+            }
+            // 2. Handle Periodic Transmission (Only if shift is done)
+            else if(SU[i].shift == 0){
+                // If the counter is still running, decrement it
+                if(SU[i].counterTxRate > 0){
+                    SU[i].counterTxRate--;
+                }
 
-    for(int i=0; i< SU.size(); i++){
-        SU[i].fillbandsAsSeenBySU(TXFreqArray, t);
-        // string s = "BandsAsSeenBySU[" + to_string(i) + "]: ";
-        // printVector(SU[i].bandsAsSeenBySU,s);
-        if(SU[i].selectedBand !=-1){ //was given band
-            if(TXFreqArray[SU[i].selectedBand] > 1){ // >1, and NOT (TXFreqArray[SU[i].selectedBand] !=1) because when SU acquired a band (alone) and doesn't have packets to transmit, TXFreqArray is equal to zero, and it counts a collision
-                // mark collision of SU on that band
-                // SU[i].history[TXFreqArray[SU[i].selectedBand]][]++;
+                // CHANGE: Check for 0 separately.
+                // This covers two cases:
+                // A) We just decremented from 1 to 0 (Periodic transmission).
+                // B) We forced it to 0 in the 'shift' block above (First transmission after shift).
+                if(SU[i].counterTxRate == 0){
+                    TXFreqArray[SU[i].selectedBand] += 1;
+                    SU[i].AllowedToTransmit=true;
+                }
+            }
+
+        }
+    }
+}
+void AttemptTransmission ( vector<SecondaryUser>&SU,vector <unsigned int> &TXFreqArray,int t)
+{
+    for(int i=0; i< SU.size(); i++)
+    {
+        SU[i].fillbandsAsSeenBySU(TXFreqArray,t);
+
+        if(SU[i].selectedBand !=-1&&SU[i].pktqueue.size()>0)
+        {
+            if(TXFreqArray[SU[i].selectedBand] > 1 &&SU[i].AllowedToTransmit==true)
+            {
+
                 SU[i].collisionCounterHistoryPerSU.pop_front();
                 SU[i].collisionCounterHistoryPerSU.push_back(1);
                 SU[i].counterTxRate= SU[i].getTxCounterVal();
-                // if (SU[i].BandsExperienceHistory[SU[i].selectedBand]>=BandTrustFactor) // bigger than 10 to ensure it does not become negative, 0 means the band is really bad
-                // {
-                //     SU[i].BandsExperienceHistory[SU[i].selectedBand]=SU[i].BandsExperienceHistory[SU[i].selectedBand]-BandTrustFactor;
-                // }
                 updateBandScore(SU[i], SU[i].selectedBand, false); // false = collision (0 reward)
                 // 1. Force a random delay (Backoff) to desynchronize
                 // Randomly wait between 2 to 10 slots before trying again
                 int backoff = std::uniform_int_distribution<int>(2, 5)(randEngine);
                 SU[i].shift += backoff;
-
-            }else{
-                if(SU[i].pktqueue.size()> 0 && SU[i].counterTxRate== 0){
-                    if(i==3){
-                        test[counter] = 1;
-                    }
-                    if(i==4){
-                        test2[counter2] = 1;
-                    }
-                    if(i==12){
-                        test3[counter3] = 1;
-                    }
-                    if(i==7){
-                        test4[counter4] =1;
-                    }
-
-                    // if (SU[i].BandsExperienceHistory[SU[i].selectedBand]<=100-BandTrustFactor) // less than 90 to ensure it does not overshoot to higher than 1, 1 means the band is very good
-                    // {
-                    //     SU[i].BandsExperienceHistory[SU[i].selectedBand]=SU[i].BandsExperienceHistory[SU[i].selectedBand]+BandTrustFactor;
-                    // }
-                    updateBandScore(SU[i], SU[i].selectedBand, true);  // true = success (100 reward)
-                    cout<<"Packet SENT!"<< endl;
-                    Packet poppedPacket = SU[i].pktqueue.front();
-                    SU[i].pktqueue.pop_front();
-                    SU[i].NumOfPacketsSent++;
-                    poppedPacket.pktArrivalTime = t;
-                    poppedPacket.pktWaitingTimeInQueue = poppedPacket.pktArrivalTime - poppedPacket.pktGenerationTime;
-                    SU[i].sentPackets.push_back(poppedPacket);
-                    // cout<< "PKT SENT ON BAND: "<< SU[i].selectedBand<< ", BY SU: "<< to_string(i)<< endl;
-                    // printOnePacket(poppedPacket);
-                    SU[i].collisionCounterHistoryPerSU.pop_front();
-                    SU[i].collisionCounterHistoryPerSU.push_back(0); //No collision
-                    // RESET THE COUNTER
-                    SU[i].counterTxRate= SU[i].getTxCounterVal();
-                }else{
-                    // Case: selected band, low TXFreqArray count (not a collision), but no packet to send (or counter > 0)
-                    SU[i].collisionCounterHistoryPerSU.pop_front();
-                    SU[i].collisionCounterHistoryPerSU.push_back(0);
-                }
+                SU[i].AllowedToTransmit=false;
             }
-        }else{
+            else if (TXFreqArray[SU[i].selectedBand] == 1 &&SU[i].AllowedToTransmit==true)
+            {
+                updateBandScore(SU[i], SU[i].selectedBand, true);  // true = success (100 reward)
+                cout<<"Packet SENT!"<< endl;
+                Packet poppedPacket = SU[i].pktqueue.front();
+                SU[i].pktqueue.pop_front();
+                SU[i].NumOfPacketsSent++;
+                poppedPacket.pktArrivalTime = t;
+                poppedPacket.pktWaitingTimeInQueue = poppedPacket.pktArrivalTime - poppedPacket.pktGenerationTime;
+                SU[i].sentPackets.push_back(poppedPacket);
+                // cout<< "PKT SENT ON BAND: "<< SU[i].selectedBand<< ", BY SU: "<< to_string(i)<< endl;
+                // printOnePacket(poppedPacket);
+                SU[i].collisionCounterHistoryPerSU.pop_front();
+                SU[i].collisionCounterHistoryPerSU.push_back(0); //No collision
+                // RESET THE COUNTER
+                SU[i].counterTxRate= SU[i].getTxCounterVal();
+                SU[i].AllowedToTransmit=false;
+            }
+            else
+            {
+
+                SU[i].collisionCounterHistoryPerSU.pop_front();
+                SU[i].collisionCounterHistoryPerSU.push_back(0);
+            }
+        }
+        else
+
+        {
             SU[i].collisionCounterHistoryPerSU.pop_front();
             SU[i].collisionCounterHistoryPerSU.push_back(0);
-
         }
-
-        // if(i ==3){
-        //     cout<< "SU[3].queueSIZE: "<< SU[i].pktqueue.size()<< endl;
-        // }
     }
-
-    counter++;
-    counter2++;
-    counter3++;
-    counter4++;
-    // cout<< "SU3 PKT QUEUE SIZE: "<< SU[3].pktqueue.size()<< endl;
-    // printVector(test, "THIS IS HOW SU 3 SENDS PACKETS");
-
-    // cout<< "SU4 PKT QUEUE SIZE: "<< SU[4].pktqueue.size()<< endl;
-    // printVector(test2, "THIS IS HOW SU 4 SENDS PACKETS");
-    // cout<< "SU12 PKT QUEUE SIZE: "<< SU[12].pktqueue.size()<< endl;
-    // printVector(test3, "THIS IS HOW SU 12 SENDS PACKETS");
-
-    // cout<< "SU7 PKT QUEUE SIZE: "<< SU[7].pktqueue.size()<< endl;
-    // printVector(test4, "THIS IS HOW SU 7 SENDS PACKETS");
-    // printVector(TXFreqArray,"TX frequency array");
+}
+vector <unsigned int> allocationFunction(vector <Band> &PU, vector<SecondaryUser>&SU, int t)
+{
+    vector <unsigned int> possibleBands;
+    vector <unsigned int> TXFreqArray(PU.size(), 0);
+    for(int i=0; i< PU.size(); i++)
+    {
+        if(PU[i].PUState ==0){
+            possibleBands.push_back(i);
+        }
+    }
+    AssignBands(SU,possibleBands);
+    CheckTxPeriod(SU,TXFreqArray);
+    AttemptTransmission(SU,TXFreqArray,t);
 
     return TXFreqArray;
+
+
 }
+
+
+
+
+
 
 //**********************************************************
 //**********************************************************
@@ -1253,7 +1458,7 @@ int main(){
         //****************************************************
 
 
-        availableTimeSlots +=numberOfBands;
+        // availableTimeSlots +=numberOfBands;
         //**********************************************************
         //******************** Generate Packets ****************
         //**********************************************************
