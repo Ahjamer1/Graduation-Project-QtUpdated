@@ -14,10 +14,10 @@
 using namespace std;
 // parameters
 const int numberOfSU = 20;
-const double numberOfBands = 20;
+const double numberOfBands = 10;
 // vector <double> numofBands = {5,10,25};
 const int numberOfPU = numberOfBands;
-const double numberOfTimeSlots = 1000;
+const double numberOfTimeSlots = 100;
 const double durationOfTimeSlot = 0.01;
 int ChooseTopKRandomly=3;
 const int numberOfBandsPerSU = 1;
