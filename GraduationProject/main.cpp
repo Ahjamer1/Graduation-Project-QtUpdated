@@ -1,5 +1,3 @@
-#include <iostream>
-#include <vector>
 #include<random>
 #include <algorithm>
 #include <string>
@@ -14,12 +12,11 @@
 using namespace std;
 // parameters
 const int numberOfSU = 20;
-const double numberOfBands = 20;
-// vector <double> numofBands = {5,10,25};
+const double numberOfBands = 40;
+// vector <double> numofBand = {5,10,25};
 const int numberOfPU = numberOfBands;
-const double numberOfTimeSlots = 10000;
+const double numberOfTimeSlots = 5000;
 const double durationOfTimeSlot = 0.01;
-int ChooseTopKRandomly=3;
 const int numberOfBandsPerSU = 1;
 vector <double> PuActiveProb={0.2,0.4,0.5,0.6};
 double probOffToOn = 0.01;//never change this
@@ -31,13 +28,13 @@ int collisionCounterHistoryPerSUSize = 10;
 int SensedBandsSUPerspectiveHistorySize = checkPeriod;
 int PuBehaviorHistorySize= checkPeriod;
 const int offtime=5;
-double DutyCycleDeterministic=0.5;
+double DutyCycleDeterministic=0.4;
 double MaxQueueSize = 50;
 double PossiblePacketDroppedSize=20;
 double DecayingTime=100;
 double BandTrustFactor=10;
-
-
+int ChooseTopKRandomly=2;
+double utilizedBands=0;
 class Parameters {
 public:
     vector <double> AvgPerTimeSlot;
@@ -46,7 +43,6 @@ public:
     vector <double> AvgPerSU;
     Parameters() : AvgPerTimeSlot(numberOfTimeSlots,0),AvgPacketWaitingTime(numberOfSU,0),AvgPerBand(numberOfBands,0),AvgPerSU(numberOfSU,0){}
 };
-
 class Band {
 public:
     bool PUState = 0;
@@ -55,7 +51,6 @@ public:
     double Weight;
     Band ():PuBehaviorHistory(PuBehaviorHistorySize,0){}
 };
-
 class Packet{
 public:
     int pktGenerationTime;
@@ -65,7 +60,6 @@ public:
     // int AckSequence; // we will assume that the SU receives an acknowledgment singal saying that the message is delivered
     // we will model this in the simulator by checking if the SU is alone on the band or not
 };
-
 class SecondaryUser{
 public:
 
@@ -218,13 +212,12 @@ public:
 
     vector <double> BandsRankingSeenByEachSu;
 
-    int collisionCounterEvery5TimeSlots =0;
 
     //**********************************************************
     //******************* SUSensingBands *******************
     //**********************************************************
     vector <unsigned int> bandsAsSeenBySU;
-    void fillbandsAsSeenBySU(vector<unsigned int> TXFREQARRAY, int t){
+    void fillbandsAsSeenBySU(vector<unsigned int> TXFREQARRAY){
         for (int i=0; i< TXFREQARRAY.size(); i++){
             if(i != this->selectedBand){
                 if(TXFREQARRAY[i] >0){
@@ -274,7 +267,7 @@ public:
     SecondaryUser():
         collisionCounterHistoryPerSU(collisionCounterHistoryPerSUSize, 0),
         bandsAsSeenBySU(numberOfBands, 0),
-        SensedBandsSUPerspectiveHistory(SensedBandsSUPerspectiveHistorySize, std::vector<unsigned int>(numberOfBands, 0)),
+        SensedBandsSUPerspectiveHistory(SensedBandsSUPerspectiveHistorySize, vector<unsigned int>(numberOfBands, 0)),
         weights(numberOfBands, 0),BandsRankingSeenByEachSu(numberOfBands,0),PossiblePacketsDropped(PossiblePacketDroppedSize,0),
         BandsExperienceHistory(numberOfBands,50)
 
@@ -282,8 +275,9 @@ public:
         // constructor body (optional)
     }
 };
-//**********************************************************
-//***************** Helper Functions *******************
+vector <Band> PU(numberOfBands);
+vector <SecondaryUser> SU(numberOfSU);
+
 //**********************************************************
 void printQueue(vector<Packet> q) {
     for(int i=0; i< q.size(); i++){
@@ -316,8 +310,6 @@ void PUInitMarkov (vector<Band>& PU)
         }
     }
 }
-
-// for allocation function and experience history
 void updateBandScore(SecondaryUser &su, int bandIndex, bool success) {
     double alpha = 0.2; // Learning rate (0.2 means we value new info by 20%)
     double reward = success ? 100.0 : 0.0;
@@ -326,9 +318,6 @@ void updateBandScore(SecondaryUser &su, int bandIndex, bool success) {
     su.BandsExperienceHistory[bandIndex] =
         (1.0 - alpha) * su.BandsExperienceHistory[bandIndex] + (alpha * reward);
 }
-
-//**********************************************************
-//**********************************************************
 vector<unsigned int> AssignStartingPositions(int size, int lower, int upper) {
 
     uniform_int_distribution<int> dist(lower, upper);
@@ -344,6 +333,7 @@ int PUInitDeterministic (vector<Band>& PU,int time,double DC)
 {
     int ActiveTime=offtime*((DC/(1-DC)));
     int counter=0;
+    cout<< "PUState: "<< endl;
     for (int i=0;i<PU.size();i++)
     { if  ((((time-StartingPositions[i])%(ActiveTime+offtime)<ActiveTime)&&time>=StartingPositions[i]))//variable for 10
         {
@@ -354,7 +344,7 @@ int PUInitDeterministic (vector<Band>& PU,int time,double DC)
             PU[i].PUState=false;
             counter++;
         }
-        // cout<<PU[i].PUState<<" ";
+       cout<<PU[i].PUState<<", ";
         PU[i].PuBehaviorHistory.pop_front();
         PU[i].PuBehaviorHistory.push_back(PU[i].PUState);
         double c=0;
@@ -367,17 +357,12 @@ int PUInitDeterministic (vector<Band>& PU,int time,double DC)
         }
         PU[i].Weight=c/PuBehaviorHistorySize;
     }
-
+    cout<< endl;
 
 
 
     return counter;
 }
-
-
-
-
-
 //**********************************************************
 //***************** Performance Parameters *************
 //**********************************************************
@@ -468,8 +453,6 @@ void FairnessCalculator(vector<SecondaryUser>& SU,vector <double> &AvgPerSU)
 //**********************************************************
 //**********************************************************
 
-vector <Band> PU(numberOfBands);
-vector <SecondaryUser> SU(numberOfSU);
 
 void initializeSystem() {
     //initialize SU properties
@@ -494,327 +477,77 @@ void initializeSystem() {
         SU[i].fillpktGenerationRate();
     }
 }
+void generatePKTS(vector <SecondaryUser> &SU, int t){
+    for(int i=0; i< SU.size(); i++){
+        // If a packet has been waiting too long, it "expires" and is dropped. This simulates latency sensitivity.
+        if(SU[i].urgency == 1 && SU[i].dataRateClass == 1){ // CAMERA
+            while(!SU[i].pktqueue.empty()){
+                // Check the packet at the front (oldest)
+                int waitingTime = t - SU[i].pktqueue.front().pktGenerationTime;
 
+                // If waiting longer than allowed (DecayingTime), drop it
+                if(waitingTime > DecayingTime){
+                    SU[i].pktqueue.pop_front();
+                    SU[i].NumOfPacketsDropped++;
 
+                    // Track drop statistics (for your weighted param calculation)
+                    SU[i].PossiblePacketsDropped.pop_front();
+                    SU[i].PossiblePacketsDropped.push_back(1);
+                    // cout<< "PKT DROPPED!!!!!"<< endl;
+                } else {
+                    // If the oldest packet is fine, the rest are fine too (ordered by time)
+                    break;
+                }
+            }
+        }
 
+        // ***************************************************************
+        // CHECK IF NEED TO GENERATE
+        bool shouldGenerate = false;
 
+        // Check Generation Rate first
+        if(SU[i].pktGenerationRate == -1){ //Camera
+            if(SU[i].counterPeriod > 0){
+                SU[i].counterPeriod--;
+            }else if(SU[i].counterPeriod== 0){
+                shouldGenerate = true;
+                SU[i].counterPeriod= SU[i].getGenCounterVal();
+            }
+        } else { // Urgent/Best Effort
+            if(randomCoinFlipper(SU[i].pktGenerationRate)){
+                shouldGenerate = true;
+            }
+        }
+        if(shouldGenerate){
+            SU[i].generatePkt(t);
+            SU[i].NumOfPacketsGenerated++;
+            // }
+        }
+    }
+}
 
-
-vector <unsigned int> test (numberOfTimeSlots,0);
-vector <unsigned int> test2 (numberOfTimeSlots,0);
-vector <unsigned int> test3 (numberOfTimeSlots,0);
-vector <unsigned int> test4 (numberOfTimeSlots,0);
-int counter = 0;
-int counter2 = 0;
-int counter3 = 0;
-int counter4 = 0;
-//**********************************************************
-//*************** Allocation Function ******************
-//**********************************************************
-
-// // INTELLIGENCE (IT SHOULD BE DOING ACQUIRING A NEW BAND)
-// vector <unsigned int> allocationFunction(vector <Band> &PU, vector<SecondaryUser>&SU, int t){
-//     vector <unsigned int> possibleBands;
-//     vector <unsigned int> occupiedBands(PU.size(), 0);
-
-//     vector <unsigned int> TXFreqArray(PU.size(), 0);
-
-//     for(int i=0; i< PU.size(); i++){
-//         if(PU[i].PUState ==0){
-//             possibleBands.push_back(i);
-//         }
-//     }
-
-//     for(int i=0; i<SU.size(); i++){
-//         if(SU[i].pktqueue.size() ==0){
-//             continue;
-//         }else{
-//             if(possibleBands.size() >0){
-//                 // SU[i].selectedBand will not be random, it must be based upon the history parameters
-//                 // SU[i] will not get assigned a band every time slot, however, it will choose to stay or relinquish
-//                 if(SU[i].selectedBand==-1){ // this if statement is satisfied, when SU wasn't assigned a band yet, or when SU relinquished a band it chose before
-//                     //INTELLIGENCE
-//                     // SU[i].selectedBand =selectRandomValues(possibleBands,1)[0]; // to be changed with history
-//                     // if(SU[i].urgency !=0){ //NOT URGENT
-//                     // retreive utilization value
-//                     // maximum TXrate possible = 1/utilization
-//                     // randomNumber = assign TXperiod that is greater than or equal to maximum TXrate possible randomly
-//                     // SU[i].shift = selectRandomValue(randomNumber)
-
-//                     // }
-
-//                     // **********************************************************
-//                     // *************** INTELLIGENT BAND SELECTION ***************
-//                     // **********************************************************
-//                     // 1. RANK CANDIDATES BY EXPERIENCE
-//                     // Create a temporary vector to hold pairs of <Score, BandIndex>
-//                     vector<pair<double, int>> rankedCandidates;
-
-//                     for(int bandIdx : possibleBands) {
-//                         // Use Experience History.
-//                         // Unvisited bands usually start at 50, Bad bands < 50, Good bands > 50.
-//                         double score = SU[i].BandsExperienceHistory[bandIdx];
-//                         rankedCandidates.push_back({score, bandIdx});
-//                     }
-
-//                     // Sort descending: Highest score (best experience) first
-//                     sort(rankedCandidates.begin(), rankedCandidates.end(),
-//                          [](const pair<double, int>& a, const pair<double, int>& b) {
-//                              return a.first > b.first;
-//                          });
-
-//                     // 2. AVOID HERDING (Top-K Selection)
-//                     // Instead of always taking the #1 band (which makes everyone crowd it),
-//                     // choose randomly from the top 3 candidates (or fewer if size < 3).
-//                     int topK = min((int)rankedCandidates.size(), 3);
-
-//                     // Select a random index from the top K candidates
-//                     int chosenIndex = std::uniform_int_distribution<int>(0, topK - 1)(randEngine);
-//                     SU[i].selectedBand = rankedCandidates[chosenIndex].second;
-//                     // cout<< "SU["<< i<< "]: selectedBand:"<< SU[i].selectedBand<< endl;
-//                     // cout << "SU[" << i << "] Intelligent Selection: Band " << SU[i].selectedBand
-//                     //      << " (Score: " << rankedCandidates[chosenIndex].first << ")" << endl;
-//                     occupiedBands[SU[i].selectedBand]+=1;
-
-
-//                     // **********************************************************
-//                     // ************ UTILIZATION-AWARE RATE CONTROL **************
-//                     // **********************************************************
-
-//                     // 3. CHECK UTILIZATION (AVAILABILITY)
-//                     // weights[k] stores the probability of the band being Idle (Availability).
-//                     // 1.0 = Fully Free, 0.0 = Fully Busy.
-//                     double availability = SU[i].weights[SU[i].selectedBand];
-
-//                     // Safety: If sensing history is empty (start of sim) or band is dead, assume low availability
-//                     if(availability <= 0.05) availability = 0.05;
-
-//                     // 4. CALCULATE MINIMUM WAIT TIME
-//                     // Minimum Period = 1 / Availability.
-//                     // Example: 50% utilization (0.5 avail) -> Period 2.
-//                     // TxRates values represent "Wait Time" (Period - 1).
-//                     double minPeriod = 1.0 / availability; //
-//                     double minWaitTime = minPeriod - 1.0;
-
-//                     if(minWaitTime < 0) minWaitTime = 0; // Sanity check
-
-//                     // 5. FILTER VALID TX RATES
-//                     // Find all indices in TxRates that satisfy: TxRate >= minWaitTime
-//                     vector<int> validTxIndices;
-//                     for(int r = 0; r < SU[i].TxRates.size(); r++) {
-//                         if(SU[i].TxRates[r] >= minWaitTime) {
-//                             validTxIndices.push_back(r);
-//                         }
-//                     }
-
-//                     // Fallback: If band is heavily congested (requires extremely slow rate not in vector),
-//                     // pick the slowest rate available.
-//                     if(validTxIndices.empty() || availability ==0) {
-//                         validTxIndices.push_back(SU[i].TxRates.size() - 1);
-//                     }
-//                     // 6. ASSIGN RATE AND SHIFT
-//                     // Randomly select one of the allowed rates
-//                     int randomRateIdx = std::uniform_int_distribution<int>(0, validTxIndices.size() - 1)(randEngine);
-
-//                     // Update the SU's current transmission index
-//                     SU[i].currentTxIndex = validTxIndices[randomRateIdx];
-//                     // Calculate the actual wait time chosen
-//                     int chosenWaitTime = SU[i].TxRates[SU[i].currentTxIndex];
-
-//                     // Assign random shift to desynchronize
-//                     if(chosenWaitTime > 0){
-//                         SU[i].shift = std::uniform_int_distribution<int>(0, chosenWaitTime)(randEngine);
-//                     } else {
-//                         SU[i].shift = 0;
-//                     }
-
-//                     // Reset the Tx Counter immediately based on new decision
-//                     SU[i].counterTxRate = SU[i].getTxCounterVal();
-
-//                     // cout << "   -> Rate Adaptation: Avail=" << availability
-//                     //      << ", MinWait=" << minWaitTime
-//                     //      << ", ChosenWait=" << chosenWaitTime
-//                     //      << ", Shift=" << SU[i].shift << endl;
-
-//                 }
-//             }
-//             //********************************************************************************
-//             //********************************************************************************
-//             // if(SU[i].shift >0){
-//             //     SU[i].shift--;
-//             // }else if(SU[i].shift==0){
-//             //     //SU[i].counterTXRate = 0;
-//             //     if(SU[i].counterTxRate > 0){
-//             //         // cout<<"SU["<<to_string(i)<< "] has: "<< to_string(SU[i].counterTxRate)<< " time slots left"<< endl;
-//             //         SU[i].counterTxRate--;
-//             //         if(SU[i].counterTxRate== 0){
-//             //             TXFreqArray[SU[i].selectedBand]+=1;
-//             //         }
-//             //     }else if(SU[i].counterTxRate== 0){
-//             //         // cout<<"SU["<<to_string(i)<< "] Reached 0 counter: "<< SU[i].selectedBand<< endl;
-//             //         //SEND PACKET
-//             //         TXFreqArray[SU[i].selectedBand]+=1;
-//             //     }
-//             // }
-//             if(SU[i].selectedBand !=-1){
-
-
-//                 if(SU[i].shift > 0){
-//                     SU[i].shift--;
-//                     if(SU[i].shift == 0){
-//                         SU[i].counterTxRate = 0;
-//                          TXFreqArray[SU[i].selectedBand] += 1;
-//                     }
-//                 }
-//                 // 2. Handle Periodic Transmission (Only if shift is done)
-//                 else if(SU[i].shift == 0){
-//                     // If the counter is still running, decrement it
-//                     if(SU[i].counterTxRate > 0){
-//                         SU[i].counterTxRate--;
-//                     }
-
-//                     // CHANGE: Check for 0 separately.
-//                     // This covers two cases:
-//                     // A) We just decremented from 1 to 0 (Periodic transmission).
-//                     // B) We forced it to 0 in the 'shift' block above (First transmission after shift).
-//                     if(SU[i].counterTxRate == 0){
-//                         TXFreqArray[SU[i].selectedBand] += 1;
-//                     }
-//                 }
-//             }
-//             //********************************************************************************
-//             //********************************************************************************
-//         }
-
-//         // if(SU[i].counterTxRate > 0){
-//         //     SU[i].counterTxRate--;
-//         // }else if(SU[i].counterTxRate== 0){
-//         //     //choose band only if txRateCounter reached 0;
-//         //     if(SU[i].pktqueue.size() ==0){
-//         //         continue;
-//         //     }else{
-//         //         if(possibleBands.size() >0){
-//         //             SU[i].selectedBand =selectRandomValues(possibleBands,1)[0];
-//         //             TXFreqArray[SU[i].selectedBand]+=1;
-
-//         //         }
-
-//         //     }
-//         // }
-//     }
-
-
-
-//     for(int i=0; i< SU.size(); i++){
-//         SU[i].fillbandsAsSeenBySU(TXFreqArray, t);
-//         // string s = "BandsAsSeenBySU[" + to_string(i) + "]: ";
-//         // printVector(SU[i].bandsAsSeenBySU,s);
-//         if(SU[i].selectedBand !=-1){ //was given band
-//             if(TXFreqArray[SU[i].selectedBand] > 1){ // >1, and NOT (TXFreqArray[SU[i].selectedBand] !=1) because when SU acquired a band (alone) and doesn't have packets to transmit, TXFreqArray is equal to zero, and it counts a collision
-//                 // mark collision of SU on that band
-//                 // SU[i].history[TXFreqArray[SU[i].selectedBand]][]++;
-//                 SU[i].collisionCounterHistoryPerSU.pop_front();
-//                 SU[i].collisionCounterHistoryPerSU.push_back(1);
-//                 SU[i].counterTxRate= SU[i].getTxCounterVal();
-//                 // if (SU[i].BandsExperienceHistory[SU[i].selectedBand]>=BandTrustFactor) // bigger than 10 to ensure it does not become negative, 0 means the band is really bad
-//                 // {
-//                 //     SU[i].BandsExperienceHistory[SU[i].selectedBand]=SU[i].BandsExperienceHistory[SU[i].selectedBand]-BandTrustFactor;
-//                 // }
-//                 updateBandScore(SU[i], SU[i].selectedBand, false); // false = collision (0 reward)
-//                 // 1. Force a random delay (Backoff) to desynchronize
-//                 // Randomly wait between 2 to 10 slots before trying again
-//                 int backoff = std::uniform_int_distribution<int>(2, 5)(randEngine);
-//                 SU[i].shift += backoff;
-
-//             }else{
-//                 if(SU[i].pktqueue.size()> 0 && SU[i].counterTxRate== 0){
-//                     if(i==3){
-//                         test[counter] = 1;
-//                     }
-//                     if(i==4){
-//                         test2[counter2] = 1;
-//                     }
-//                     if(i==12){
-//                         test3[counter3] = 1;
-//                     }
-//                     if(i==7){
-//                         test4[counter4] =1;
-//                     }
-
-//                     // if (SU[i].BandsExperienceHistory[SU[i].selectedBand]<=100-BandTrustFactor) // less than 90 to ensure it does not overshoot to higher than 1, 1 means the band is very good
-//                     // {
-//                     //     SU[i].BandsExperienceHistory[SU[i].selectedBand]=SU[i].BandsExperienceHistory[SU[i].selectedBand]+BandTrustFactor;
-//                     // }
-//                     updateBandScore(SU[i], SU[i].selectedBand, true);  // true = success (100 reward)
-//                     cout<<"Packet SENT!"<< endl;
-//                     Packet poppedPacket = SU[i].pktqueue.front();
-//                     SU[i].pktqueue.pop_front();
-//                     SU[i].NumOfPacketsSent++;
-//                     poppedPacket.pktArrivalTime = t;
-//                     poppedPacket.pktWaitingTimeInQueue = poppedPacket.pktArrivalTime - poppedPacket.pktGenerationTime;
-//                     SU[i].sentPackets.push_back(poppedPacket);
-//                     // cout<< "PKT SENT ON BAND: "<< SU[i].selectedBand<< ", BY SU: "<< to_string(i)<< endl;
-//                     // printOnePacket(poppedPacket);
-//                     SU[i].collisionCounterHistoryPerSU.pop_front();
-//                     SU[i].collisionCounterHistoryPerSU.push_back(0); //No collision
-//                     // RESET THE COUNTER
-//                     SU[i].counterTxRate= SU[i].getTxCounterVal();
-//                 }else{
-//                     // Case: selected band, low TXFreqArray count (not a collision), but no packet to send (or counter > 0)
-//                     SU[i].collisionCounterHistoryPerSU.pop_front();
-//                     SU[i].collisionCounterHistoryPerSU.push_back(0);
-//                 }
-//             }
-//         }else{
-//             SU[i].collisionCounterHistoryPerSU.pop_front();
-//             SU[i].collisionCounterHistoryPerSU.push_back(0);
-
-//         }
-
-//         // if(i ==3){
-//         //     cout<< "SU[3].queueSIZE: "<< SU[i].pktqueue.size()<< endl;
-//         // }
-//     }
-
-//     counter++;
-//     counter2++;
-//     counter3++;
-//     counter4++;
-//     // cout<< "SU3 PKT QUEUE SIZE: "<< SU[3].pktqueue.size()<< endl;
-//     // printVector(test, "THIS IS HOW SU 3 SENDS PACKETS");
-
-//     // cout<< "SU4 PKT QUEUE SIZE: "<< SU[4].pktqueue.size()<< endl;
-//     // printVector(test2, "THIS IS HOW SU 4 SENDS PACKETS");
-//     // cout<< "SU12 PKT QUEUE SIZE: "<< SU[12].pktqueue.size()<< endl;
-//     // printVector(test3, "THIS IS HOW SU 12 SENDS PACKETS");
-
-//     // cout<< "SU7 PKT QUEUE SIZE: "<< SU[7].pktqueue.size()<< endl;
-//     // printVector(test4, "THIS IS HOW SU 7 SENDS PACKETS");
-//     // printVector(TXFreqArray,"TX frequency array");
-
-//     return TXFreqArray;
-//  }
-// // //*******************************************************
-// //*******************************************************
-int RankBandsAndChoooseTopK (vector<SecondaryUser>&SU,vector <unsigned int> &possibleBands,int SUIndex)
+//************** Sub Allocation Funcions ****************//
+void RankBandsAndChoooseTopK (vector<SecondaryUser>&SU,vector <unsigned int> &possibleBands,int SUIndex)
 {
     vector <pair<double, int>> Ranks(possibleBands.size(), {0.0, 0});
     for (int i=0;i<possibleBands.size();i++)
     {
-        Ranks[i].first=(SU[SUIndex].BandsExperienceHistory[possibleBands[i]]+PU[possibleBands[i]].Weight+SU[SUIndex].weights[possibleBands[i]])/3;
+        Ranks[i].first=(SU[SUIndex].BandsExperienceHistory[possibleBands[i]]/100.0+PU[possibleBands[i]].Weight+SU[SUIndex].weights[possibleBands[i]])/3;
         Ranks[i].second=possibleBands[i];
     }
+
     sort(Ranks.begin(), Ranks.end(),
          [](const pair<double, int>& a, const pair<double, int>& b) {
              return a.first > b.first;
          });
 
 
-
     int topK = min((int)Ranks.size(), ChooseTopKRandomly);
 
     int chosenIndex = std::uniform_int_distribution<int>(0, topK-1)(randEngine);
-    return Ranks[chosenIndex].second;
+    SU[SUIndex].selectedBand=Ranks[chosenIndex].second;
+    cout<<"SU["<< SUIndex<< "].selectedBand = "<< SU[SUIndex].selectedBand<< endl;
+    cout<< "SU["<< SUIndex<< "].queueSize= "<< SU[SUIndex].pktqueue.size()<< endl;
 
 
 }
@@ -872,7 +605,7 @@ void AssignBands (vector<SecondaryUser>&SU,vector <unsigned int> &possibleBands)
             {
                 if(SU[i].selectedBand==-1)
                 {
-                    SU[i].selectedBand=RankBandsAndChoooseTopK (SU,possibleBands,i);
+                    RankBandsAndChoooseTopK (SU,possibleBands,i);
                     chooseTxRateAfterAcquiring(i);
 
                 }
@@ -893,10 +626,11 @@ void CheckTxPeriod  (vector<SecondaryUser>&SU,vector <unsigned int> &TXFreqArray
             if(SU[i].shift > 0){
                 SU[i].shift--;
                 if(SU[i].shift == 0){
+                    if(SU[i].pktqueue.size()>0){
                     SU[i].counterTxRate = 0;
                     TXFreqArray[SU[i].selectedBand] += 1;
                     SU[i].AllowedToTransmit=true;
-
+                    }
                 }
             }
             // 2. Handle Periodic Transmission (Only if shift is done)
@@ -911,8 +645,10 @@ void CheckTxPeriod  (vector<SecondaryUser>&SU,vector <unsigned int> &TXFreqArray
                 // A) We just decremented from 1 to 0 (Periodic transmission).
                 // B) We forced it to 0 in the 'shift' block above (First transmission after shift).
                 if(SU[i].counterTxRate == 0){
-                    TXFreqArray[SU[i].selectedBand] += 1;
-                    SU[i].AllowedToTransmit=true;
+                    if(SU[i].pktqueue.size()>0){
+                        TXFreqArray[SU[i].selectedBand] += 1;
+                        SU[i].AllowedToTransmit=true;
+                    }
                 }
             }
 
@@ -923,7 +659,7 @@ void AttemptTransmission ( vector<SecondaryUser>&SU,vector <unsigned int> &TXFre
 {
     for(int i=0; i< SU.size(); i++)
     {
-        SU[i].fillbandsAsSeenBySU(TXFreqArray,t);
+        SU[i].fillbandsAsSeenBySU(TXFreqArray);
 
         if(SU[i].selectedBand !=-1&&SU[i].pktqueue.size()>0)
         {
@@ -936,11 +672,19 @@ void AttemptTransmission ( vector<SecondaryUser>&SU,vector <unsigned int> &TXFre
                 updateBandScore(SU[i], SU[i].selectedBand, false); // false = collision (0 reward)
                 // 1. Force a random delay (Backoff) to desynchronize
                 // Randomly wait between 2 to 10 slots before trying again
-                int backoff = std::uniform_int_distribution<int>(2, 5)(randEngine);
-                SU[i].shift += backoff;
+                // int backoff = std::uniform_int_distribution<int>(2, 5)(randEngine);
+                int backoff = 1;
+                if(SU[i].pktqueue.size() > MaxQueueSize * 0.8) {
+                    backoff = 1;
+                    // SU[i].adaptQuality("increaseQuality");
+                } else {
+                    backoff = std::uniform_int_distribution<int>(1, 3)(randEngine);
+                }
+                SU[i].shift = backoff;
                 SU[i].AllowedToTransmit=false;
+
             }
-            else if (TXFreqArray[SU[i].selectedBand] == 1 &&SU[i].AllowedToTransmit==true)
+            else if (TXFreqArray[SU[i].selectedBand] == 1 && SU[i].AllowedToTransmit==true)
             {
                 updateBandScore(SU[i], SU[i].selectedBand, true);  // true = success (100 reward)
                 cout<<"Packet SENT!"<< endl;
@@ -960,7 +704,6 @@ void AttemptTransmission ( vector<SecondaryUser>&SU,vector <unsigned int> &TXFre
             }
             else
             {
-
                 SU[i].collisionCounterHistoryPerSU.pop_front();
                 SU[i].collisionCounterHistoryPerSU.push_back(0);
             }
@@ -973,6 +716,7 @@ void AttemptTransmission ( vector<SecondaryUser>&SU,vector <unsigned int> &TXFre
         }
     }
 }
+//*******************************************************//
 vector <unsigned int> allocationFunction(vector <Band> &PU, vector<SecondaryUser>&SU, int t)
 {
     vector <unsigned int> possibleBands;
@@ -983,120 +727,49 @@ vector <unsigned int> allocationFunction(vector <Band> &PU, vector<SecondaryUser
             possibleBands.push_back(i);
         }
     }
+    for (int i=0;i<SU.size();i++)
+    {
+        if (PU[SU[i].selectedBand].PUState==1)
+        {
+            SU[i].selectedBand=-1;
+            SU[i].numberOfTimesDecreasedTXRATE=0;
+        }
+    }
     AssignBands(SU,possibleBands);
     CheckTxPeriod(SU,TXFreqArray);
     AttemptTransmission(SU,TXFreqArray,t);
 
+
+
+    int counter=0;
+    for (int i=0;i<TXFreqArray.size();i++)
+    {
+        if (TXFreqArray[i]>0)
+            counter++;
+    }
+    utilizedBands=utilizedBands+counter;
     return TXFreqArray;
 
 
 }
-
-
-
-
-
-
-//**********************************************************
-//**********************************************************
-
-
-
-
-void generatePKTS(vector <SecondaryUser> &SU, int t){
-    for(int i=0; i< SU.size(); i++){
-        // If a packet has been waiting too long, it "expires" and is dropped. This simulates latency sensitivity.
-        if(SU[i].urgency == 1 && SU[i].dataRateClass == 1){ // CAMERA
-            while(!SU[i].pktqueue.empty()){
-                // Check the packet at the front (oldest)
-                int waitingTime = t - SU[i].pktqueue.front().pktGenerationTime;
-
-                // If waiting longer than allowed (DecayingTime), drop it
-                if(waitingTime > DecayingTime){
-                    SU[i].pktqueue.pop_front();
-                    SU[i].NumOfPacketsDropped++;
-
-                    // Track drop statistics (for your weighted param calculation)
-                    SU[i].PossiblePacketsDropped.pop_front();
-                    SU[i].PossiblePacketsDropped.push_back(1);
-                    // cout<< "PKT DROPPED!!!!!"<< endl;
-                } else {
-                    // If the oldest packet is fine, the rest are fine too (ordered by time)
-                    break;
-                }
-            }
-        }
-
-        // ***************************************************************
-        // CHECK IF NEED TO GENERATE
-        bool shouldGenerate = false;
-
-        // Check Generation Rate first
-        if(SU[i].pktGenerationRate == -1){ //Camera
-            if(SU[i].counterPeriod > 0){
-                SU[i].counterPeriod--;
-            }else if(SU[i].counterPeriod== 0){
-                shouldGenerate = true;
-                SU[i].counterPeriod= SU[i].getGenCounterVal();
-            }
-        } else { // Urgent/Best Effort
-            if(randomCoinFlipper(SU[i].pktGenerationRate)){
-                shouldGenerate = true;
-            }
-        }
-        if(shouldGenerate){
-                SU[i].generatePkt(t);
-                SU[i].NumOfPacketsGenerated++;
-            // }
-            }
-        }
-    }
-
-
-void collisionCounter(vector <SecondaryUser> &SU, int t){
-    for(int i=0; i< SU.size(); i++){
-        int collisionCounter = 0;
-        if(t%10 == 0){
-            for(int k=0; k< collisionCounterHistoryPerSUSize; k++){
-                if(SU[i].collisionCounterHistoryPerSU[k] == 1){
-                    collisionCounter++;
-                }
-            }
-        }
-        SU[i].collisionCounterEvery5TimeSlots = collisionCounter;
-    }
-}
-
-
-bool checkBandsWithNoPU(vector <unsigned int> PUStates){ // RETURNS TRUE IF THEre IS AT LEAST ONE EMPTY BAND NOT OCCUPIED BY PU
-    for (int i=0; i< PUStates.size(); i++){
-        if(PUStates[i] == 0){
-            return true;
-        }
-    }
-    return false;
-}
-
-vector<unsigned int> getHigherValues(vector<double> nums, int target_index) {
-    vector<unsigned int> result;
-    int target_value = nums[target_index];
-
-    for (int i = 0; i < nums.size(); i++) {
-        if (nums[i] > target_value) {
-            // Store the value and the index as a pair
-            result.push_back(i);
-        }
-    }
-    return result;
-}
-
-
-//INTELLIGENCE
-void CalculateSuSpecificParameters (vector <SecondaryUser> &SU, int t,vector <double> &Urgent,vector <double> &Camera,vector <double> &BestEffort)
+//************** SubUpdateParametersFunctions ****************//
+void RelinquishingTendency (int t)
 {
     for (int i=0;i<SU.size();i++)
     {
-        int counter=0;
+
+        for(int j = 0; j< numberOfBands; j++){
+            double numberOfZeros = 0;
+            for(int k = 0; k< SU[i].SensedBandsSUPerspectiveHistory.size(); k++){
+                if(SU[i].SensedBandsSUPerspectiveHistory[k][j] ==0){
+
+                    numberOfZeros++;
+                }
+            }
+            SU[i].weights[j] = numberOfZeros/ SensedBandsSUPerspectiveHistorySize;
+        }
+
+        double counter=0;
         for (int j=0;j<SU[i].collisionCounterHistoryPerSU.size();j++)
         {
             if (SU[i].collisionCounterHistoryPerSU[j]==1)
@@ -1123,165 +796,10 @@ void CalculateSuSpecificParameters (vector <SecondaryUser> &SU, int t,vector <do
             SU[i].AvgPacketWaitingTimeWeight=0;
         }
         SU[i].RelinquishingTendency=(SU[i].CollisionsWeight+SU[i].QueueSizeWeight+SU[i].NumOfPacketsDroppedWeight + SU[i].AvgPacketWaitingTimeWeight)/4;
-        if (i==0)
-        {
-            Urgent[t]=SU[i].RelinquishingTendency;
-        }
-        if (i==5)
-        {
-            Camera[t]=SU[i].RelinquishingTendency;
-        }
-        if (i==14)
-        {
-            BestEffort[t]=SU[i].RelinquishingTendency;
-        }
+
     }
 }
-void TakeDecisionStayOrRelinquish(vector <SecondaryUser> &SU, int t){
-    // FOR EACH SU => Decide to stay or relinquish
-    // if: PU is ON on selectedBand => relinquish and acquire another band immediately ✅
-    // if urgent:
-    // if performance parameters not good over 3 time slots => relinquish => call ACQUIREBAND✅
-    // else if camera or best effort:
-    // if: performance is good
-    // STAY✅
-    // Increase DataRate✅
-
-
-    // else if: performance is bad
-    // when measuring the performance of a band: this performance is stored within a vector for each SU
-    // each SU: [band 0, band 1, band 2, ... , band 9,] with scores.
-    // When Acquiring => you try to acquire a band, that was good for you before (high score) or a new band you haven't tried before
-    // these scores show the following:
-    // 1. The number of time slots the band was acquired for
-    // 2. The total score
-    // 3. the score has a TTL that decreases with time => so that we give bands another opportunity after adequate time
-
-
-    //if: otherBands are not better than current or no other possible bands (occupied by PU)
-    // STAY
-    // decrease data rate and choose a random shift between 0 and TXperiod time, to transmit at.
-    //else (other are bands are better && there are possible bands available to move to):
-    // if we decreased TXrate multiple times and current one is low:
-    //relinquish => and acquire one of the top candidateBands randomly
-    // when calling acquire band =>
-    // else: stay for other 10 time slots
-
-
-    vector <unsigned int> PUActiveRightNow(PU.size(),0);
-    for (int i=0; i< PU.size(); i++){
-        if(PU[i].PUState == true){
-            PUActiveRightNow[i] = 1;
-        }else{
-            PUActiveRightNow[i] = 0;
-        }
-    }
-    bool bandWithNoPUExists = checkBandsWithNoPU(PUActiveRightNow);
-
-    for(int i=0; i< SU.size(); i++){
-        vector<unsigned int> BandsWithHigherScore = getHigherValues(SU[i].BandsRankingSeenByEachSu,SU[i].selectedBand);
-
-
-        if(PUActiveRightNow[SU[i].selectedBand] == 1){
-            SU[i].selectedBand = -1;
-            SU[i].numberOfTimesDecreasedTXRATE = 0;
-            // CALL ACQUIRE BAND FUNCTION FIXXXXXX!!!!
-            // if(BandsWithHigherScore.size() > 0) {
-            //     SU[i].selectedBand = selectRandomValues(BandsWithHigherScore, 1)[0];
-            // }
-            continue;
-
-        }else{
-            if(t % 3 ==0){
-                if(SU[i].urgency == 0){ //URGENT SU
-                    // CHECK PERFORMANCE PARAMETERS FOR URGENT SU
-                    // DECIDE TO STAY OR RELINQUISH
-                    if(SU[i].RelinquishingTendency > 0.4){
-                        // RELINQUISH
-                        SU[i].selectedBand = -1;
-                        // CALL ACQUIRE BAND FUNCTION
-                        // if(BandsWithHigherScore.size() > 0) {
-                        //     SU[i].selectedBand = selectRandomValues(BandsWithHigherScore, 1)[0];
-                        // }
-                    }else {
-                        continue;
-                    }
-                }
-
-            }
-            if(t % checkPeriod == 0){
-                if(SU[i].dataRateClass == 1){ // CAMERA OR BEST EFFORT
-                    // CHECK PERFORMANCE
-                    // cout<< "LOOK HERE!!!!!!"<< SU[i].RelinquishingTendency<< endl;
-                    // cout<< "SU12: "<< SU[12].pktqueue.size()<< endl;
-                    // cout<< "SU12: "<< SU[12].AvgPacketWaitingTimeWeight<< endl;
-                    // cout<< "SU12: "<< SU[12].CollisionsWeight<< endl;
-                    // cout<< "SU12: "<< SU[12].NumOfPacketsDroppedWeight<< endl;
-
-                    if(SU[i].RelinquishingTendency < 0.4){
-                        // ****************************************************
-                        // SU IS DOING WELL IN BAND, SO INCREASE TXRATE
-                        // ****************************************************
-                        if(SU[i].urgency == 1 || SU[i].urgency == 2){ // CAMERA OR BEST EFFORT
-                            // CHANGED: Unified call
-                            SU[i].adaptQuality("increaseQuality");
-                            SU[i].shift = selectRandomValue(SU[i].getTxCounterVal());
-                        }
-                        // ****************************************************
-                        // ****************************************************
-                    }else if(SU[i].RelinquishingTendency >= 0.4){
-
-                        if(!bandWithNoPUExists || BandsWithHigherScore.size() ==0){ // NO bands not occupied by a PU (all others have PU in them) OR NO bands with higher score than current band
-                            // STAY
-                            // DECREASE DATA RATE
-                            if(SU[i].urgency == 1 || SU[i].urgency == 2){ // CAMERA OR BEST EFFORT
-                                // CHANGED: Unified call
-                                SU[i].adaptQuality("decreaseQuality");
-                            }
-
-                            // (COUNTER OF TIMES DECREASED TXRATE)++
-                            SU[i].numberOfTimesDecreasedTXRATE++;
-                            // ASSIGN A RANDOM SHIFT NUMBER BETWEEN 0 AND TXPERIOD CHOSEN
-                            SU[i].shift = selectRandomValue(SU[i].getTxCounterVal());
-                        }else if(bandWithNoPUExists && BandsWithHigherScore.size() >=1){
-                            // ****************************************************
-                            // LOOP OVER EMPTY BANDS
-                            // EXTRACT THE BANDS THAT HAS CURRENTLY HIGHER SCORES THAN OURS,
-                            // BOTH STEPS ARE DONE IN BandsWithHigherScore
-                            // ****************************************************
-                            // AND NO PREVIOUS EXPERIENCE SCORE (hasn't been acquired by this SU before) OR HIGH PREVIOUS EXPERIENCE SCORE (higher history)
-                            if(SU[i].numberOfTimesDecreasedTXRATE < 2){
-                                if(SU[i].urgency == 1 || SU[i].urgency == 2){ // CAMERA OR BEST EFFORT
-                                    // CHANGED: Unified call
-                                    SU[i].adaptQuality("decreaseQuality");
-                                }
-
-                                // (COUNTER OF TIMES DECREASED TXRATE)++
-                                SU[i].numberOfTimesDecreasedTXRATE++;
-                                // ASSIGN A RANDOM SHIFT NUMBER BETWEEN 0 AND TXPERIOD CHOSEN
-                                SU[i].shift = selectRandomValue(SU[i].getTxCounterVal());
-
-                            }else{
-                                // RELINQUISH
-                                // cout<< "RELINQUISHED!!"<< endl;
-                                SU[i].selectedBand = -1;
-                                SU[i].numberOfTimesDecreasedTXRATE = 0;
-                                // CALL ACQUIRE BAND FUNCTION
-                                // if(BandsWithHigherScore.size() > 0) {
-                                //     SU[i].selectedBand = selectRandomValues(BandsWithHigherScore, 1)[0];
-                                // }
-                            }
-                        }
-                    }
-                }else{
-                    continue;
-                }
-            }
-        }
-    }
-}
-
-void SuBandExperienceUpdate (vector <SecondaryUser> &SU)
+void SuBandExperienceUpdate ()
 {
     double decayRate = 0.99;
     double neutralVal = 50;
@@ -1313,89 +831,7 @@ void SuBandExperienceUpdate (vector <SecondaryUser> &SU)
     }
 
 }
-//INTELLIGENCE
-// void TakeDecisionDataRate(vector <SecondaryUser> &SU, int t){
-//     for(int i=0; i< SU.size(); i++){
-//         if(t%10==0 && t!=0){
-//             // cout<< "SU["<< i<< "]: collisionCounterEvery5TimeSlots: "<< SU[i].collisionCounterEvery5TimeSlots<< endl;
-//         }
-//         if(t % 10 ==0 && t!=0){
-//             if(SU[i].pktGenerationRate ==-1){
-//                 // cout<< "SU["<< i<< "]: collisionCounterEvery5TimeSlots: "<< SU[i].collisionCounterEvery5TimeSlots<< endl;
-//                 if(SU[i].collisionCounterEvery5TimeSlots >= 2){
-//                     // choose slower TX number
-//                     SU[i].chooseTxRate(SU[i].TxRates, "decreaseTxRate");
-//                     SU[i].choosePktPeriod(SU[i].periodsForBulky, "decreaseQuality");
-//                     // cout<< "CAMERA SU["<< to_string(i)<< "]: on Band: "<<SU[i].selectedBand<< ": Decreased Quality"<< endl;
-//                     // cout<< endl;
-//                     // cout<<"NEW CHOSEN TX RATEEEEEE index:::::" <<SU[i].chosenTxRate<< endl;
-//                     // cout<<"NEW CHOSEN TX RATEEEEEE:::::" <<SU[i].TxRates[SU[i].chosenTxRate]<< endl;
-
-//                 }else{
-//                     // choose higher TX number
-//                     SU[i].chooseTxRate(SU[i].TxRates, "increaseTxRate");
-//                     SU[i].choosePktPeriod(SU[i].periodsForBulky, "increaseQuality");
-//                     // cout<< "CAMERA SU["<< to_string(i)<< "]: on Band: "<<SU[i].selectedBand<< ": Increased Quality"<< endl;
-//                     // cout<<"NEW CHOSEN TX RATEEEEEE:::::" <<SU[i].chosenTxRate<< endl;
-//                     // cout<<"NEW CHOSEN TX RATEEEEEE:::::" <<SU[i].TxRates[SU[i].chosenTxRate]<< endl;
-
-//                 }
-//             }else if(SU[i].urgency == 2 && SU[i].dataRateClass == 1){
-//                 // cout<< "SU["<< i<< "]: collisionCounterEvery5TimeSlots: "<< SU[i].collisionCounterEvery5TimeSlots<< endl;
-//                 if(SU[i].collisionCounterEvery5TimeSlots >= 2){
-//                     // choose slower TX number
-//                     SU[i].chooseTxRate(SU[i].TxRates, "decreaseTxRate");
-//                     // cout<< "BEST EFFORT SU["<< to_string(i)<< "]: on Band: "<<SU[i].selectedBand<< ": Decreased Quality"<< endl;
-//                     // cout<<"NEW CHOSEN TX RATEEEEEE:::::" <<SU[i].chosenTxRate<< endl;
-//                     // cout<<"NEW CHOSEN TX RATEEEEEE:::::" <<SU[i].TxRates[SU[i].chosenTxRate]<< endl;
-
-//                 }else{
-//                     // choose higher TX number
-//                     SU[i].chooseTxRate(SU[i].TxRates, "increaseTxRate");
-//                     // cout<< "BEST EFFORT SU["<< to_string(i)<< "]: on Band: "<<SU[i].selectedBand<< ": Increased Quality"<< endl;
-//                     // cout<<"NEW CHOSEN TX RATEEEEEE:::::" <<SU[i].chosenTxRate<< endl;
-//                     // cout<<"NEW CHOSEN TX RATEEEEEE:::::" <<SU[i].TxRates[SU[i].chosenTxRate]<< endl;
-
-//                 }
-
-//             }
-//         }
-//         // if(SU[i].pktGenerationRate ==-1){ //TYPE BULKY uninterruptible
-
-//         //     if(t%10 == 0 && t!=0){
-//         //         // cout<< "SU["<< i<< "]: collisionCounterEvery5TimeSlots: "<< SU[i].collisionCounterEvery5TimeSlots<< endl;
-//         //         if(SU[i].collisionCounterEvery5TimeSlots >= 2){
-//         //             // choose slower TX number
-//         //             SU[i].chooseTxRate(SU[i].TxRates, "decreaseTxRate");
-//         //             SU[i].choosePktPeriod(SU[i].periodsForBulky, "decreaseQuality");
-
-//         //         }else{
-//         //             // choose higher TX number
-//         //             SU[i].chooseTxRate(SU[i].TxRates, "increaseTxRate");
-//         //             SU[i].choosePktPeriod(SU[i].periodsForBulky, "increaseQuality");
-
-//         //         }
-//         //     }
-//         // }else{ // URGENT and BULKY interruptible SU's
-
-
-//         //     if(SU[i].urgency == 2 && SU[i].dataRateClass == 1){ //Best effort
-//         //         if(t%10 == 0 && t!=0){
-//         //             // cout<< "SU["<< i<< "]: collisionCounterEvery5TimeSlots: "<< SU[i].collisionCounterEvery5TimeSlots<< endl;
-//         //             if(SU[i].collisionCounterEvery5TimeSlots >= 2){
-//         //                 // choose slower TX number
-//         //                 SU[i].chooseTxRate(SU[i].TxRates, "decreaseTxRate");
-//         //             }else{
-//         //                 // choose higher TX number
-//         //                 SU[i].chooseTxRate(SU[i].TxRates, "increaseTxRate");
-//         //             }
-//         //         }
-//         //     }
-//         // }
-
-//     }
-// }
-void candidateBandsWeights(vector <SecondaryUser> &SU){
+void candidateBandsWeights(){
     vector <double> weights;
     for(int i=0; i< SU.size(); i++){
         for(int j = 0; j< numberOfBands; j++){
@@ -1410,21 +846,96 @@ void candidateBandsWeights(vector <SecondaryUser> &SU){
         }
     }
 }
-void DecisionMaker (vector <SecondaryUser> &SU,vector <Band> &PU)
+//***********************************************************//
+void UpdateParameters (int time)
 {
-    double weight_SU = 0.4; // Weight for sensing history
-    double weight_PU = 0.3;     // Weight for PU behavior
-    double weight_experience = 0.3;    // Weight for Experience
+    candidateBandsWeights();
+    RelinquishingTendency(time);
+    SuBandExperienceUpdate();
 
-    for (int i=0;i<SU.size();i++)
+}
+//************** Sub StayOrRelinquish Functions ****************//
+void UrgentCheck(int SuIndex)
+{
+    if(SU[SuIndex].urgency == 0)
     {
-        for (int k=0;k<numberOfBands;k++)
+        if (SU[SuIndex].RelinquishingTendency>0.4)
+            SU[SuIndex].selectedBand=-1;
+    }
+}
+void CameraCheck(int SuIndex)
+{
+    if(SU[SuIndex].dataRateClass == 1&&SU[SuIndex].urgency==1)
+    {
+        if (SU[SuIndex].RelinquishingTendency<0.4)
         {
-            double normalizedExp = SU[i].BandsExperienceHistory[k] / 100.0;
-            SU[i].BandsRankingSeenByEachSu[k]= (weight_SU * SU[i].weights[k]) + (weight_PU * PU[k].Weight) + (weight_experience * normalizedExp);
+            SU[SuIndex].adaptQuality("increaseQuality");
+            SU[SuIndex].shift = selectRandomValue(SU[SuIndex].getTxCounterVal());
+        }
+        else
+        {
+            if (SU[SuIndex].numberOfTimesDecreasedTXRATE>3)
+            {
+                SU[SuIndex].selectedBand=-1;
+                SU[SuIndex].numberOfTimesDecreasedTXRATE=0;
+            }
+            else
+            {
+                SU[SuIndex].adaptQuality("decreaseQuality");
+                SU[SuIndex].numberOfTimesDecreasedTXRATE++;
+                SU[SuIndex].shift = selectRandomValue(SU[SuIndex].getTxCounterVal());
+            }
+
         }
     }
 }
+void BestEffortCheck(int SuIndex)
+{
+    if(SU[SuIndex].dataRateClass == 1&&SU[SuIndex].urgency==2)
+    {
+        if (SU[SuIndex].RelinquishingTendency<0.4)
+        {
+            SU[SuIndex].adaptQuality("increaseQuality");
+            SU[SuIndex].shift = selectRandomValue(SU[SuIndex].getTxCounterVal());
+        }
+        else
+        {
+            if (SU[SuIndex].numberOfTimesDecreasedTXRATE>2)
+            {
+                SU[SuIndex].selectedBand=-1;
+                SU[SuIndex].numberOfTimesDecreasedTXRATE=0;
+            }
+            else
+            {
+                SU[SuIndex].adaptQuality("decreaseQuality");
+                SU[SuIndex].numberOfTimesDecreasedTXRATE++;
+                SU[SuIndex].shift = selectRandomValue(SU[SuIndex].getTxCounterVal());
+            }
+
+        }
+    }
+}
+//**************************************************************//
+void StayOrRelinquish (int time)
+{
+    for (int i=0;i<SU.size();i++)
+    {
+        if (time%3==0)
+        {
+            UrgentCheck(i);
+        }
+        if (time%10==0)
+        {
+            CameraCheck(i);
+            BestEffortCheck(i);
+        }
+
+    }
+}
+
+
+
+
 int main(){
     Parameters Collisions;
     Parameters TotalPackets;
@@ -1438,125 +949,187 @@ int main(){
     Parameters RelinquishingTendencyBestEffort;
 
     StartingPositions=AssignStartingPositions(numberOfBands,1,numberOfBands);
-    //initialize system
     initializeSystem();
+    double availableTimeSlots = 0;
+    vector <double> UrgentThroughputsOverTime;
 
-    int availableTimeSlots = 0;
-    for(int t=0; t< numberOfTimeSlots; t++){ //TIMESLOTS LOOP
+    vector <double> CameraThroughputsOverTime;
+
+    vector <double> BestEffortThroughputsOverTime;
+    vector <double> utilizationPerTimeSlot;
+    vector <vector<double>> TXPeriodsOverTimeSlots(4, vector<double>(numberOfTimeSlots, 0));
+
+    for(int t=0; t< numberOfTimeSlots; t++)
+    { //TIMESLOTS LOOP
         cout<< "time slot: "<< t<< endl;
-
-        // CHOOSE PU ACTIVATION
-        //****************************************************
-        // PUInitMarkov(PU);
         availableTimeSlots += PUInitDeterministic(PU,t,DutyCycleDeterministic);
-        // cout<< "PU activation at time slot: ";
-        // for(int i=0; i< PU.size(); i++){
-        //     cout<< PU[i].PUState<< " ";
-        // }
-        // cout<< endl;
-        //****************************************************
-
-
-        // availableTimeSlots +=numberOfBands;
-        //**********************************************************
-        //******************** Generate Packets ****************
-        //**********************************************************
         generatePKTS(SU, t);
-
-        CalculateSuSpecificParameters (SU,t,RelinquishingTendencyUrgent.AvgPerTimeSlot,RelinquishingTendencyCamera.AvgPerTimeSlot,RelinquishingTendencyBestEffort.AvgPerTimeSlot);
-        // cout<<"SU[3].AvgPacketWaitingTimeWeight :";
-        // cout<<SU[3].AvgPacketWaitingTimeWeight;
-        // cout<<endl;
-
-    candidateBandsWeights(SU);
-        //**********************************************************
-        //***************** Allocation Function ****************
-        //**********************************************************
         vector <unsigned int> TXFreqArray= allocationFunction(PU, SU,t);
-        SuBandExperienceUpdate(SU);
-        // cout<<"Bands Experience: ";
-        // cout<< endl;
-        // for(int k= 0; k< SU.size(); k++){
-
-        //     for (int i=0;i<numberOfBands;i++)
-        //     {
-        //         cout<<SU[k].BandsExperienceHistory[i]<<" ";
-        //     }
-        //     cout<<endl;
-        // }
+        double number = 0;
+        for(int i=0; i< TXFreqArray.size(); i++){
+            if(TXFreqArray[i] > 0){
+                number++;
+            }
+        }
+        number /= TXFreqArray.size();
+        utilizationPerTimeSlot.push_back(number);
         printVector(TXFreqArray, "TXFreqArray: ");
+        UpdateParameters(t);
+        StayOrRelinquish(t);
 
-        //**********************************************************
-        //*************** Calculate CollisionCounter ***********
-        //**********************************************************
-        collisionCounter(SU, t);
+        double totalNnumbersOfPktsGeneratedUrgent = 0;
+        double totalNnumbersOfPktsGeneratedCamera= 0;
+        double totalNnumbersOfPktsGeneratedBestEffort= 0;
+        double totalNnumbersOfPktsSentUrgent = 0;
+        double totalNnumbersOfPktsSentCamera = 0;
+        double totalNnumbersOfPktsSentBestEffort = 0;
+        for(int i=2; i< 4; i++){
+            if(SU[i].urgency == 1 && SU[i].dataRateClass ==1){
+            TXPeriodsOverTimeSlots[i][t] =  SU[i].TxRates[SU[i].currentTxIndex];
+            }
+        }
 
-        //**********************************************************
-        //****** Take Decision to increase/Decrease DataRate *****
-        //**********************************************************
-        // TakeDecisionDataRate(SU,t);
+        for (int i=0;i<SU.size();i++)
+        {
+            if(SU[i].dataRateClass ==0){
+                totalNnumbersOfPktsGeneratedUrgent += SU[i].NumOfPacketsGenerated;
+                totalNnumbersOfPktsSentUrgent += SU[i].NumOfPacketsSent;
+            }
+            if(SU[i].dataRateClass ==1 && SU[i].urgency ==1){
+                totalNnumbersOfPktsGeneratedCamera += SU[i].NumOfPacketsGenerated;
+                totalNnumbersOfPktsSentCamera += SU[i].NumOfPacketsSent;
+            }
+            if(SU[i].dataRateClass ==1 && SU[i].urgency ==2){
+                totalNnumbersOfPktsGeneratedBestEffort += SU[i].NumOfPacketsGenerated;
+                totalNnumbersOfPktsSentBestEffort += SU[i].NumOfPacketsSent;
+            }
+        }
+        if(totalNnumbersOfPktsGeneratedUrgent !=0){
+            UrgentThroughputsOverTime.push_back(totalNnumbersOfPktsSentUrgent / totalNnumbersOfPktsGeneratedUrgent);
 
-        //**********************************************************
-        //************ Take Decision Stay or Relinquish **********
-        //**********************************************************
-        DecisionMaker(SU,PU);
-        TakeDecisionStayOrRelinquish(SU,t);
+        }else{
+            UrgentThroughputsOverTime.push_back(0);
 
+        }
 
+        if(totalNnumbersOfPktsGeneratedCamera !=0){
+            CameraThroughputsOverTime.push_back(totalNnumbersOfPktsSentCamera / totalNnumbersOfPktsGeneratedCamera);
 
-        TotalPacketsCounter(t,SU,TotalPackets.AvgPerTimeSlot);
-        CollisionCounter(t,Collisions.AvgPerTimeSlot,TXFreqArray);
-        ThroughPutCalculator(t,TXFreqArray,Throughput.AvgPerTimeSlot,Throughput.AvgPerBand);
-        UtilizationCalculator(t,TXFreqArray,Utilization.AvgPerTimeSlot,Utilization.AvgPerBand);
+        }else{
+            UrgentThroughputsOverTime.push_back(0);
+
+        }
+        if(totalNnumbersOfPktsGeneratedBestEffort !=0){
+            BestEffortThroughputsOverTime.push_back(totalNnumbersOfPktsSentBestEffort / totalNnumbersOfPktsGeneratedBestEffort);
+        }else{
+            UrgentThroughputsOverTime.push_back(0);
+
+        }
 
 
     }
-    cout<< "available time slots: "<< availableTimeSlots<< endl;
-    // cout<<"All packets: "<< endl;
-    // for(int i=0; i< SU.size(); i++){
-    //     // cout<< "this is the length of queue for SU[" << i << "]: " << SU[i].pktqueue.size()<< endl;
-    //     cout<< SU[i].sentPackets.size() + SU[i].pktqueue.size()<< ", ";
-    // }
-    // cout<< endl;
-    // cout<<"All Time sent packets: "<< endl;
-    // for(int i=0; i< SU.size(); i++){
-    //     // cout<< "this is the length of queue for SU[" << i << "]: " << SU[i].pktqueue.size()<< endl;
-    //    cout<< SU[i].sentPackets.size()<< ", ";
-    // }
-    // cout<< endl;
-    // cout<<"Packets still waiting in the queue to be sent: "<< endl;
-    // for(int i=0; i< SU.size(); i++){
-    //     // cout<< "this is the length of queue for SU[" << i << "]: " << SU[i].pktqueue.size()<< endl;
-    //     cout<<SU[i].pktqueue.size()<<", ";
-    // }
-    // cout<< endl;
-    // printQueue(SU[2].sentPackets);
+    double num = 0;
+    for(int i=0; i< utilizationPerTimeSlot.size(); i++){
+        num +=utilizationPerTimeSlot[i];
+    }
+    cout<< "UTIL: "<< num / utilizationPerTimeSlot.size();
+    cout<< "***********************************************"<< endl;
+    // printVector(TXPeriodsOverTimeSlots[2], "TXPeriodsOverTimeSlots: ");
+    string filename="D:\\ElectricalEngineering\\#0 Graduation project\\The Project\\afterUpdate\\Graduation-Project-QtUpdated\\TXrates1.txt";
+    ofstream File1 (filename);
+    for (int n=0;n<TXPeriodsOverTimeSlots[2].size();n++)
+    {
+        File1<<TXPeriodsOverTimeSlots[2][n]<< " ";
 
-    WaitingTimeCalculator(SU,WaitingTime.AvgPacketWaitingTime);
+    }
+    File1.close();
+    filename="D:\\ElectricalEngineering\\#0 Graduation project\\The Project\\afterUpdate\\Graduation-Project-QtUpdated\\TXrates2.txt";
 
-    NumberOfPacketsDroppedCalculator(SU,NumberofPacketsDropped.AvgPerSU);
+    ofstream File2 (filename);
+    for (int n=0;n<TXPeriodsOverTimeSlots[3].size();n++)
+    {
+        File2<<TXPeriodsOverTimeSlots[3][n]<< " ";
 
-    FairnessCalculator(SU,Fairness.AvgPerSU);
+    }
+    File2.close();
+
+    cout<< "***********************************************"<< endl;
+    // printVector(UrgentThroughputsOverTime, "UrgentThroughputsOverTime: ");
+    // here
+    filename="D:\\ElectricalEngineering\\#0 Graduation project\\The Project\\afterUpdate\\Graduation-Project-QtUpdated\\ThroughputURGENT2.txt";
+    ofstream File6 (filename);
+    for (int n=0;n<UrgentThroughputsOverTime.size();n++)
+    {
+        File6<<UrgentThroughputsOverTime[n]<< " ";
+
+    }
+    File6.close();
+    cout<< "***********************************************"<< endl;
+    cout<< "***********************************************"<< endl;
+    // printVector(CameraThroughputsOverTime, "CameraThroughputsOverTime: ");
+    filename="D:\\ElectricalEngineering\\#0 Graduation project\\The Project\\afterUpdate\\Graduation-Project-QtUpdated\\ThroughputCAMERA2.txt";
+    ofstream File7 (filename);
+    for (int n=0;n<CameraThroughputsOverTime.size();n++)
+    {
+        File7<<CameraThroughputsOverTime[n]<< " ";
+
+    }
+    File7.close();
+    cout<< "***********************************************"<< endl;
+    cout<< "***********************************************"<< endl;
+
+    // printVector(BestEffortThroughputsOverTime, "BestEffortThroughputsOverTime: ");
+    filename="D:\\ElectricalEngineering\\#0 Graduation project\\The Project\\afterUpdate\\Graduation-Project-QtUpdated\\ThroughputBESTEFFORT2.txt";
+    ofstream File8 (filename);
+    for (int n=0;n<BestEffortThroughputsOverTime.size();n++)
+    {
+        File8<<BestEffortThroughputsOverTime[n]<< " ";
+
+    }
+    File8.close();
+
+    // printVector(utilizationPerTimeSlot, "utilizationPerTimeSlot: ");
+
+    filename="D:\\ElectricalEngineering\\#0 Graduation project\\The Project\\afterUpdate\\Graduation-Project-QtUpdated\\Utilization.txt";
+    ofstream File9 (filename);
+    for (int n=0;n<utilizationPerTimeSlot.size();n++)
+    {
+        File9<<utilizationPerTimeSlot[n]<< " ";
+
+    }
+    File9.close();
+    cout<< "***********************************************"<< endl;
 
 
 
-
-
-    // printVector(Collisions.AvgPerTimeSlot,"Collision Count per timeslot Averaged Per Band");
-    // printVector(TotalPackets.AvgPerTimeSlot,"Total Packets in whole queue");
-    // printVector(WaitingTime.AvgPacketWaitingTime,"Average Packet Waiting time for each SU ");
-    // printVector(Utilization.AvgPerTimeSlot,"TimeSlot Average");
-    // printVector(Utilization.AvgPerBand,"Band Average");
-    // printVector(Throughput.AvgPerTimeSlot,"TimeSlot Average");
-    // printVector(Throughput.AvgPerBand,"Band Average");
-    // printDeQueue(PU[0].PuBehaviorHistory);
     double totalNumberOfPktsGenerated = 0;
     double totalNumberOfPktsSent= 0;
     double avgThroughputPerSU = 0;
+
+    double totalNnumbersOfPktsGeneratedUrgent = 0;
+    double totalNnumbersOfPktsGeneratedCamera= 0;
+    double totalNnumbersOfPktsGeneratedBestEffort= 0;
+    double totalNnumbersOfPktsSentUrgent = 0;
+    double totalNnumbersOfPktsSentCamera= 0;
+    double totalNnumbersOfPktsSentBestEffort= 0;
+
     for (int i=0;i<SU.size();i++)
     {
         cout<<"SU"<<i<<" PacketsGenerated:"<<SU[i].NumOfPacketsGenerated<<" ";
         totalNumberOfPktsGenerated +=SU[i].NumOfPacketsGenerated;
+
+        if(SU[i].dataRateClass ==0){
+            totalNnumbersOfPktsGeneratedUrgent += SU[i].NumOfPacketsGenerated;
+            totalNnumbersOfPktsSentUrgent += SU[i].NumOfPacketsSent;
+        }
+        if(SU[i].dataRateClass ==1 && SU[i].urgency ==1){
+            totalNnumbersOfPktsGeneratedCamera += SU[i].NumOfPacketsGenerated;
+            totalNnumbersOfPktsSentCamera += SU[i].NumOfPacketsSent;
+        }
+        if(SU[i].dataRateClass ==1 && SU[i].urgency ==2){
+            totalNnumbersOfPktsGeneratedBestEffort += SU[i].NumOfPacketsGenerated;
+            totalNnumbersOfPktsSentBestEffort += SU[i].NumOfPacketsSent;
+        }
         cout<<" PacketsSent:"<<SU[i].NumOfPacketsSent;
         totalNumberOfPktsSent += SU[i].NumOfPacketsSent;
         avgThroughputPerSU += SU[i].NumOfPacketsSent / SU[i].NumOfPacketsGenerated;
@@ -1565,114 +1138,25 @@ int main(){
         cout<<" RelinquishingTendency: "<<SU[i].RelinquishingTendency;
         cout<<endl;
     }
-    // printVector(Fairness.AvgPerSU,"Packets sent over generated for each su");
-    // printVector(NumberofPacketsDropped.AvgPerSU,"Packets Dropped for each su");
 
+    cout<< "***********************************************"<< endl;
+    cout<< "totalNnumbersOfPktsGeneratedUrgent: "<< totalNnumbersOfPktsGeneratedUrgent<< endl;
+    cout<< "totalNnumbersOfPktsSentUrgent: "<<  totalNnumbersOfPktsSentUrgent<< endl;
+    cout<< "ThroughputURGENT: "<< totalNnumbersOfPktsSentUrgent / totalNnumbersOfPktsGeneratedUrgent<< endl;
+    cout<< "totalNnumbersOfPktsGeneratedCamera: "<< totalNnumbersOfPktsGeneratedCamera<< endl;
+    cout<< "totalNnumbersOfPktsSentCamera: "<<  totalNnumbersOfPktsSentCamera<< endl;
+    cout<< "ThroughputCAMERA: "<< totalNnumbersOfPktsSentCamera / totalNnumbersOfPktsGeneratedCamera<< endl;
+    cout<< "totalNnumbersOfPktsGeneratedBestEffort: "<< totalNnumbersOfPktsGeneratedBestEffort<< endl;
+    cout<< "totalNnumbersOfPktsSentBestEffort: "<<  totalNnumbersOfPktsSentBestEffort<< endl;
+    cout<< "ThroughputBESTEFFORT: "<< totalNnumbersOfPktsSentBestEffort / totalNnumbersOfPktsGeneratedBestEffort<< endl;
+    cout<< "***********************************************"<< endl;
+    cout<< endl<< endl;
     cout<< "totalNumberOfPktsGenerated: "<< totalNumberOfPktsGenerated<< endl;
     cout<< "totalNumberOfPktsSent: "<< totalNumberOfPktsSent<< endl;
     cout<< "Load is: "<< totalNumberOfPktsGenerated / availableTimeSlots<< endl;
 
     cout<< "avgThroughputPerSU: "<< avgThroughputPerSU/ numberOfSU << endl;
+    cout<<"Utilization is: "<<utilizedBands/availableTimeSlots<< endl;
 
 
-
-    // *********************************Writing Into Files*******************************************//
-    string filename="/txtfiles/Collisions.txt";
-    ofstream File1 (filename);
-    for (int i=0;i<Collisions.AvgPerTimeSlot.size();i++)
-    {
-        File1<<Collisions.AvgPerTimeSlot[i]<<" ";
-
-    }
-    File1.close();
-
-    filename="txtfiles/TotalPacketsEachTimeSlot.txt";
-    ofstream File2 (filename);
-    for (int i=0;i<TotalPackets.AvgPerTimeSlot.size();i++)
-    {
-        File2<<TotalPackets.AvgPerTimeSlot[i]<< " ";
-
-    }
-    File2.close();
-    filename="txtfiles/ThroughPutAvgTimeSlot.txt";
-    ofstream File3 (filename);
-    for (int i=0;i<Throughput.AvgPerTimeSlot.size();i++)
-    {
-        File3<<Throughput.AvgPerTimeSlot[i]<< " ";
-
-    }
-    File3.close();
-    filename="txtfiles/ThroughPutAvgBand.txt";
-    ofstream File4 (filename);
-    for (int i=0;i<Throughput.AvgPerBand.size();i++)
-    {
-        File4<<Throughput.AvgPerBand[i]<< " ";
-
-    }
-    File4.close();
-    filename="txtfiles/UtilizationAvgTimeSlot.txt";
-    ofstream File5 (filename);
-    for (int i=0;i<Utilization.AvgPerTimeSlot.size();i++)
-    {
-        File5<<Utilization.AvgPerTimeSlot[i]<< " ";
-
-    }
-    File5.close();
-    filename="txtfiles/UtilizationAvgBand.txt";
-    ofstream File6 (filename);
-    for (int i=0;i<Utilization.AvgPerBand.size();i++)
-    {
-        File6<<Utilization.AvgPerBand[i]<< " ";
-
-    }
-    File6.close();
-    filename="txtfiles/NumberOfPacketsDroppedPerSu.txt";
-    ofstream File7 (filename);
-    for (int i=0;i<NumberofPacketsDropped.AvgPerSU.size();i++)
-    {
-        File7<<NumberofPacketsDropped.AvgPerSU[i]<< " ";
-
-    }
-    File7.close();
-
-    filename="txtfiles/FairnessPerSu.txt";
-    ofstream File8 (filename);
-    for (int i=0;i<Fairness.AvgPerSU.size();i++)
-    {
-        File8<<Fairness.AvgPerSU[i]<< " ";
-
-    }
-    File8.close();
-    filename="txtfiles/AvgPacketWaitingTimePerSu.txt";
-    ofstream File9 (filename);
-    for (int i=0;i<WaitingTime.AvgPacketWaitingTime.size();i++)
-    {
-        File9<<WaitingTime.AvgPacketWaitingTime[i]<< " ";
-
-    }
-    File9.close();
-    filename="txtfiles/RelinquishingTendencyUrgentSU.txt";
-    ofstream File10 (filename);
-    for (int i=0;i<RelinquishingTendencyUrgent.AvgPerTimeSlot.size();i++)
-    {
-        File10<<RelinquishingTendencyUrgent.AvgPerTimeSlot[i]<<" ";
-
-    }
-    File10.close();
-    filename="txtfiles/RelinquishingTendencyCameraSU.txt";
-    ofstream File11 (filename);
-    for (int i=0;i<RelinquishingTendencyCamera.AvgPerTimeSlot.size();i++)
-    {
-        File11<<RelinquishingTendencyCamera.AvgPerTimeSlot[i]<<" ";
-
-    }
-    File11.close();
-    filename="txtfiles/RelinquishingTendencyBestEffort.txt";
-    ofstream File12 (filename);
-    for (int i=0;i<RelinquishingTendencyBestEffort.AvgPerTimeSlot.size();i++)
-    {
-        File12<<RelinquishingTendencyBestEffort.AvgPerTimeSlot[i]<<" ";
-
-    }
-    File12.close();
 }
