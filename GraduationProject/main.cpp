@@ -344,7 +344,7 @@ int PUInitDeterministic (vector<Band>& PU,int time,double DC)
             PU[i].PUState=false;
             counter++;
         }
-       cout<<PU[i].PUState<<", ";
+        cout<<PU[i].PUState<<", ";
         PU[i].PuBehaviorHistory.pop_front();
         PU[i].PuBehaviorHistory.push_back(PU[i].PUState);
         double c=0;
@@ -627,9 +627,9 @@ void CheckTxPeriod  (vector<SecondaryUser>&SU,vector <unsigned int> &TXFreqArray
                 SU[i].shift--;
                 if(SU[i].shift == 0){
                     if(SU[i].pktqueue.size()>0){
-                    SU[i].counterTxRate = 0;
-                    TXFreqArray[SU[i].selectedBand] += 1;
-                    SU[i].AllowedToTransmit=true;
+                        SU[i].counterTxRate = 0;
+                        TXFreqArray[SU[i].selectedBand] += 1;
+                        SU[i].AllowedToTransmit=true;
                     }
                 }
             }
@@ -1087,7 +1087,6 @@ int main(){
 
     }
     File8.close();
-
     // printVector(utilizationPerTimeSlot, "utilizationPerTimeSlot: ");
 
     filename="D:\\ElectricalEngineering\\#0 Graduation project\\The Project\\afterUpdate\\Graduation-Project-QtUpdated\\Utilization.txt";
