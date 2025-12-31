@@ -15,7 +15,7 @@ const int numberOfSU = 20;
 const double numberOfBands = 40;
 // vector <double> numofBand = {5,10,25};
 const int numberOfPU = numberOfBands;
-const double numberOfTimeSlots = 5000;
+const double numberOfTimeSlots = 10000;
 const double durationOfTimeSlot = 0.01;
 const int numberOfBandsPerSU = 1;
 vector <double> PuActiveProb={0.2,0.4,0.5,0.6};
@@ -202,7 +202,7 @@ public:
         this->currentTxIndex = newTxIndex;
 
         if(this->urgency == 1){ // CAMERA: Lock Gen rate to Tx Rate
-            // this->currentGenIndex = newTxIndex;
+            this->currentGenIndex = newTxIndex;
         }
         // If BEST EFFORT (urgency 2): Do not touch currentGenIndex
     }
@@ -966,6 +966,9 @@ int main(){
 
     vector <double> BestEffortThroughputsOverTime;
     vector <double> utilizationPerTimeSlot;
+    vector <double> numberOfPktsDroppedOverTimeUrgent;
+    vector <double> numberOfPktsDroppedOverTimeCamera;
+    vector <double> numberOfPktsDroppedOverTimeBestEffort;
     vector <vector<double>> TXPeriodsOverTimeSlots(4, vector<double>(numberOfTimeSlots, 0));
 
     for(int t=0; t< numberOfTimeSlots; t++)
@@ -992,6 +995,9 @@ int main(){
         double totalNnumbersOfPktsSentUrgent = 0;
         double totalNnumbersOfPktsSentCamera = 0;
         double totalNnumbersOfPktsSentBestEffort = 0;
+        double totalNumberOfPktsDroppedUrgent = 0;
+        double totalNumberOfPktsDroppedCamera= 0;
+        double totalNumberOfPktsDroppedBestEffort = 0;
         for(int i=2; i< 4; i++){
             if(SU[i].urgency == 1 && SU[i].dataRateClass ==1){
             TXPeriodsOverTimeSlots[i][t] =  SU[i].TxRates[SU[i].currentTxIndex];
@@ -1003,14 +1009,17 @@ int main(){
             if(SU[i].dataRateClass ==0){
                 totalNnumbersOfPktsGeneratedUrgent += SU[i].NumOfPacketsGenerated;
                 totalNnumbersOfPktsSentUrgent += SU[i].NumOfPacketsSent;
+                totalNumberOfPktsDroppedUrgent += SU[i].NumOfPacketsDropped;
             }
             if(SU[i].dataRateClass ==1 && SU[i].urgency ==1){
                 totalNnumbersOfPktsGeneratedCamera += SU[i].NumOfPacketsGenerated;
                 totalNnumbersOfPktsSentCamera += SU[i].NumOfPacketsSent;
+                totalNumberOfPktsDroppedCamera += SU[i].NumOfPacketsDropped;
             }
             if(SU[i].dataRateClass ==1 && SU[i].urgency ==2){
                 totalNnumbersOfPktsGeneratedBestEffort += SU[i].NumOfPacketsGenerated;
                 totalNnumbersOfPktsSentBestEffort += SU[i].NumOfPacketsSent;
+                totalNumberOfPktsDroppedBestEffort += SU[i].NumOfPacketsDropped;
             }
         }
         if(totalNnumbersOfPktsGeneratedUrgent !=0){
@@ -1034,6 +1043,10 @@ int main(){
             UrgentThroughputsOverTime.push_back(0);
 
         }
+        numberOfPktsDroppedOverTimeUrgent.push_back(totalNumberOfPktsDroppedUrgent/2);
+        numberOfPktsDroppedOverTimeCamera.push_back(totalNumberOfPktsDroppedCamera/9);
+        numberOfPktsDroppedOverTimeBestEffort.push_back(totalNumberOfPktsDroppedBestEffort);
+
 
         cout<< "In time slot: "<< t<< " total pktsSent: "<< numberOfPktsSent<<endl;
     }
@@ -1044,28 +1057,37 @@ int main(){
     cout<< "UTIL: "<< num / utilizationPerTimeSlot.size();
     cout<< "***********************************************"<< endl;
     // printVector(TXPeriodsOverTimeSlots[2], "TXPeriodsOverTimeSlots: ");
-    string filename="D:\\ElectricalEngineering\\#0 Graduation project\\The Project\\afterUpdate\\Graduation-Project-QtUpdated\\TXrates1.txt";
-    ofstream File1 (filename);
-    for (int n=0;n<TXPeriodsOverTimeSlots[2].size();n++)
+    string filename="D:\\ElectricalEngineering\\#0 Graduation project\\The Project\\afterUpdate\\Graduation-Project-QtUpdated\\AllOnSameFigure\\PktsDropped\\NumberOfPktsDroppedUrgent.txt";
+    ofstream File4 (filename);
+    for (int n=0;n<numberOfPktsDroppedOverTimeUrgent.size();n++)
     {
-        File1<<TXPeriodsOverTimeSlots[2][n]<< " ";
+        File4<<numberOfPktsDroppedOverTimeUrgent[n]<< " ";
+
+    }
+    File4.close();
+    filename="D:\\ElectricalEngineering\\#0 Graduation project\\The Project\\afterUpdate\\Graduation-Project-QtUpdated\\AllOnSameFigure\\PktsDropped\\NumberOfPktsDroppedCamera.txt";
+
+    ofstream File5 (filename);
+    for (int n=0;n<numberOfPktsDroppedOverTimeCamera.size();n++)
+    {
+        File5<<numberOfPktsDroppedOverTimeCamera[n]<< " ";
+
+    }
+    File5.close();
+
+    filename="D:\\ElectricalEngineering\\#0 Graduation project\\The Project\\afterUpdate\\Graduation-Project-QtUpdated\\AllOnSameFigure\\PktsDropped\\NumberOfPktsDroppedBestEffort.txt";
+
+    ofstream File1 (filename);
+    for (int n=0;n<numberOfPktsDroppedOverTimeBestEffort.size();n++)
+    {
+        File1<<numberOfPktsDroppedOverTimeBestEffort[n]<< " ";
 
     }
     File1.close();
-    filename="D:\\ElectricalEngineering\\#0 Graduation project\\The Project\\afterUpdate\\Graduation-Project-QtUpdated\\TXrates2.txt";
-
-    ofstream File2 (filename);
-    for (int n=0;n<TXPeriodsOverTimeSlots[3].size();n++)
-    {
-        File2<<TXPeriodsOverTimeSlots[3][n]<< " ";
-
-    }
-    File2.close();
-
     cout<< "***********************************************"<< endl;
     // printVector(UrgentThroughputsOverTime, "UrgentThroughputsOverTime: ");
     // here
-    filename="D:\\ElectricalEngineering\\#0 Graduation project\\The Project\\afterUpdate\\Graduation-Project-QtUpdated\\ThroughputURGENT2.txt";
+    filename="D:\\ElectricalEngineering\\#0 Graduation project\\The Project\\afterUpdate\\Graduation-Project-QtUpdated\\AllOnSameFigure\\Throughput\\ThroughputURGENT2.txt";
     ofstream File6 (filename);
     for (int n=0;n<UrgentThroughputsOverTime.size();n++)
     {
@@ -1076,7 +1098,7 @@ int main(){
     cout<< "***********************************************"<< endl;
     cout<< "***********************************************"<< endl;
     // printVector(CameraThroughputsOverTime, "CameraThroughputsOverTime: ");
-    filename="D:\\ElectricalEngineering\\#0 Graduation project\\The Project\\afterUpdate\\Graduation-Project-QtUpdated\\ThroughputCAMERA2.txt";
+    filename="D:\\ElectricalEngineering\\#0 Graduation project\\The Project\\afterUpdate\\Graduation-Project-QtUpdated\\AllOnSameFigure\\Throughput\\ThroughputCAMERA2.txt";
     ofstream File7 (filename);
     for (int n=0;n<CameraThroughputsOverTime.size();n++)
     {
@@ -1088,7 +1110,7 @@ int main(){
     cout<< "***********************************************"<< endl;
 
     // printVector(BestEffortThroughputsOverTime, "BestEffortThroughputsOverTime: ");
-    filename="D:\\ElectricalEngineering\\#0 Graduation project\\The Project\\afterUpdate\\Graduation-Project-QtUpdated\\ThroughputBESTEFFORT2.txt";
+    filename="D:\\ElectricalEngineering\\#0 Graduation project\\The Project\\afterUpdate\\Graduation-Project-QtUpdated\\AllOnSameFigure\\Throughput\\ThroughputBESTEFFORT2.txt";
     ofstream File8 (filename);
     for (int n=0;n<BestEffortThroughputsOverTime.size();n++)
     {
@@ -1098,7 +1120,7 @@ int main(){
     File8.close();
     // printVector(utilizationPerTimeSlot, "utilizationPerTimeSlot: ");
 
-    filename="D:\\ElectricalEngineering\\#0 Graduation project\\The Project\\afterUpdate\\Graduation-Project-QtUpdated\\Utilization.txt";
+    filename="D:\\ElectricalEngineering\\#0 Graduation project\\The Project\\afterUpdate\\Graduation-Project-QtUpdated\\seperateFigures\\Utilization.txt";
     ofstream File9 (filename);
     for (int n=0;n<utilizationPerTimeSlot.size();n++)
     {
