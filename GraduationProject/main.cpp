@@ -92,11 +92,11 @@ public:
     int numberOfTimesDecreasedTXRATE = 0;
     int shift = 0;
     // {1, 2, 4, 6, 10, 12, 16, 18, 22};
-    vector <unsigned int> periodsForBulky = {0,1,4,6};
+    vector <unsigned int> periodsForBulky = {0,1};
     // periodsForBulky generates a packet every 1, 2, 5, 10, 15 (0,1,4,9,14 are set for counting purposes)
 
     // CHANGED: Fixed values to align with periodsForBulky (Shift by 1 fix)
-    vector <unsigned int> TxRates = {0,1,4,6}; // the value "0" means "1" which means: every time slot(fastest) / the value "0" means "2" which means: ON OFF ON OFF
+    vector <unsigned int> TxRates = {0,1}; // the value "0" means "1" which means: every time slot(fastest) / the value "0" means "2" which means: ON OFF ON OFF
     // TxRates transmits a packet every 1, 2, 5, 10, 15 (0,1,4,9,19 are set for counting purposes)
 
     // CHANGED: Added indices to track current Quality Level
@@ -202,7 +202,7 @@ public:
         this->currentTxIndex = newTxIndex;
 
         if(this->urgency == 1){ // CAMERA: Lock Gen rate to Tx Rate
-            this->currentGenIndex = newTxIndex;
+            // this->currentGenIndex = newTxIndex;
         }
         // If BEST EFFORT (urgency 2): Do not touch currentGenIndex
     }
@@ -333,7 +333,7 @@ int PUInitDeterministic (vector<Band>& PU,int time,double DC)
 {
     int ActiveTime=offtime*((DC/(1-DC)));
     int counter=0;
-    cout<< "PUState: "<< endl;
+    // cout<< "PUState: "<< endl;
     for (int i=0;i<PU.size();i++)
     { if  ((((time-StartingPositions[i])%(ActiveTime+offtime)<ActiveTime)&&time>=StartingPositions[i]))//variable for 10
         {
@@ -344,7 +344,7 @@ int PUInitDeterministic (vector<Band>& PU,int time,double DC)
             PU[i].PUState=false;
             counter++;
         }
-        cout<<PU[i].PUState<<", ";
+        // cout<<PU[i].PUState<<", ";
         PU[i].PuBehaviorHistory.pop_front();
         PU[i].PuBehaviorHistory.push_back(PU[i].PUState);
         double c=0;
@@ -357,7 +357,7 @@ int PUInitDeterministic (vector<Band>& PU,int time,double DC)
         }
         PU[i].Weight=c/PuBehaviorHistorySize;
     }
-    cout<< endl;
+    // cout<< endl;
 
 
 
@@ -530,24 +530,30 @@ void generatePKTS(vector <SecondaryUser> &SU, int t){
 void RankBandsAndChoooseTopK (vector<SecondaryUser>&SU,vector <unsigned int> &possibleBands,int SUIndex)
 {
     vector <pair<double, int>> Ranks(possibleBands.size(), {0.0, 0});
+    // cout<< "These are the scores from SU["<< SUIndex<< "]Perspective: "<< endl;
+
     for (int i=0;i<possibleBands.size();i++)
     {
         Ranks[i].first=(SU[SUIndex].BandsExperienceHistory[possibleBands[i]]/100.0+PU[possibleBands[i]].Weight+SU[SUIndex].weights[possibleBands[i]])/3;
         Ranks[i].second=possibleBands[i];
     }
+    std::shuffle(Ranks.begin(), Ranks.end(), randEngine);
 
     sort(Ranks.begin(), Ranks.end(),
          [](const pair<double, int>& a, const pair<double, int>& b) {
              return a.first > b.first;
          });
 
-
+    // for(int i=0; i< Ranks.size(); i++){
+    //     cout<< Ranks[i].second<< ": "<< Ranks[i].first<< "  ";
+    // }
+    // cout<< endl;
     int topK = min((int)Ranks.size(), ChooseTopKRandomly);
 
     int chosenIndex = std::uniform_int_distribution<int>(0, topK-1)(randEngine);
     SU[SUIndex].selectedBand=Ranks[chosenIndex].second;
-    cout<<"SU["<< SUIndex<< "].selectedBand = "<< SU[SUIndex].selectedBand<< endl;
-    cout<< "SU["<< SUIndex<< "].queueSize= "<< SU[SUIndex].pktqueue.size()<< endl;
+    // cout<<"SU["<< SUIndex<< "].selectedBand = "<< SU[SUIndex].selectedBand<< endl;
+    // cout<< "SU["<< SUIndex<< "].queueSize= "<< SU[SUIndex].pktqueue.size()<< endl;
 
 
 }
@@ -655,8 +661,10 @@ void CheckTxPeriod  (vector<SecondaryUser>&SU,vector <unsigned int> &TXFreqArray
         }
     }
 }
+double numberOfPktsSent = 0;
 void AttemptTransmission ( vector<SecondaryUser>&SU,vector <unsigned int> &TXFreqArray,int t)
 {
+
     for(int i=0; i< SU.size(); i++)
     {
         SU[i].fillbandsAsSeenBySU(TXFreqArray);
@@ -686,8 +694,9 @@ void AttemptTransmission ( vector<SecondaryUser>&SU,vector <unsigned int> &TXFre
             }
             else if (TXFreqArray[SU[i].selectedBand] == 1 && SU[i].AllowedToTransmit==true)
             {
+                numberOfPktsSent++;
                 updateBandScore(SU[i], SU[i].selectedBand, true);  // true = success (100 reward)
-                cout<<"Packet SENT!"<< endl;
+                // cout<<"Packet SENT!"<< endl;
                 Packet poppedPacket = SU[i].pktqueue.front();
                 SU[i].pktqueue.pop_front();
                 SU[i].NumOfPacketsSent++;
@@ -973,7 +982,7 @@ int main(){
         }
         number /= TXFreqArray.size();
         utilizationPerTimeSlot.push_back(number);
-        printVector(TXFreqArray, "TXFreqArray: ");
+        // printVector(TXFreqArray, "TXFreqArray: ");
         UpdateParameters(t);
         StayOrRelinquish(t);
 
@@ -1026,7 +1035,7 @@ int main(){
 
         }
 
-
+        cout<< "In time slot: "<< t<< " total pktsSent: "<< numberOfPktsSent<<endl;
     }
     double num = 0;
     for(int i=0; i< utilizationPerTimeSlot.size(); i++){
